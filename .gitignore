@@ -1,18 +1,46 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
 .Python
-*.egg-info/
-dist/
+
+# Distribution / packaging
 build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
+.tox/
+
+# Virtual environments
 .venv/
-.env
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
 .DS_Store
+
+# voicequal
+.python-version
+calibration.json
 *.wav
 !tests/**/*.wav
 !examples/**/*.wav
 
-# Local tooling / orchestration state — not part of the project
-.omc/
+# Claude Code artifacts
+.claude/
+CLAUDE.md
+VOICEQUAL_EXTRACTION.md
