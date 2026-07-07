@@ -2,124 +2,154 @@
 
 Real-time audio quality assessment for voice apps.
 
-voicequal answers a simple question: **"is this audio recording good enough to process?"**
-It works on saved files or a live microphone stream, and returns one of four
-tiers — `excellent`, `good`, `fair`, `poor` — using an SNR-gated multi-metric
-algorithm.
+Answers the question every voice app eventually has to answer:
+**"is this recording clean enough to process?"**
 
----
+voicequal analyzes audio using four acoustic metrics and returns a
+tier — `excellent`, `good`, `fair`, or `poor` — plus the numbers
+behind the decision.
+
+```text
+$ voicequal listen
+[15:26:37]  EXCELLENT   room= 45.5 dBA   SNR=18.4dB
+[15:26:53]  CHANGE  GOOD   room= 55.0 dBA
+[15:26:59]  CHANGE  FAIR   room= 60.4 dBA
+[15:27:09]  CHANGE  POOR   room= 71.4 dBA
+[15:27:53]  CHANGE  EXCELLENT   room= 45.5 dBA
+```
 
 ## Install
 
 ```bash
-pip install voicequal            # core library
-pip install 'voicequal[mic]'     # + live microphone streaming
+pip install voicequal              # core library
+pip install 'voicequal[mic]'       # + live-mic support
 ```
 
 ## Quick start
 
-**File-based:**
+### Analyze a file
 
 ```python
 from voicequal import assess
 
-result = assess("my_recording.wav")
-print(result.quality)        # "excellent" | "good" | "fair" | "poor"
-print(result.reason)         # short explanation of which branch fired
-print(result.background_db)  # room loudness in a dBA-like scale
-print(result.snr)            # signal-to-noise ratio in dB
+result = assess("recording.wav")
+print(result.quality)          # "good"
+print(result.background_db)    # 52.3
+print(result.snr)              # 24.1
+print(result.reason)           # "25<snr<=35 with moderate room: good"
 ```
 
-**Streaming (any audio source):**
+### Real-time streaming
 
 ```python
 from voicequal import LiveDetector
 
 detector = LiveDetector()
-detector.on_change(lambda r: print(f"→ {r.quality}   ({r.background_db:.1f} dBA)"))
+detector.on_change(lambda result: print(f"→ {result.quality}"))
 
-# feed float32 audio chunks from anywhere (mic, network, file)
-detector.push(audio_chunk)
+while streaming:
+    chunk = get_audio_chunk()   # any float32 numpy array
+    detector.push(chunk)
 ```
 
-**Command line:**
+### Command line
 
 ```bash
-voicequal assess my_recording.wav
-
-voicequal listen                  # live mic — first run triggers calibration
-voicequal listen --sensitive      # stricter thresholds for desktop testing
-voicequal listen --calibrate      # re-run calibration
+voicequal assess my_recording.wav      # one-shot file report
+voicequal listen                       # live mic streaming
+voicequal listen --calibrate           # first-time mic calibration
+voicequal listen --sensitive           # stricter thresholds
 ```
 
-## How the algorithm works
+First `listen` run auto-calibrates the mic (10 seconds — sit quiet
+then make noise). Calibration is saved to `~/.voicequal/`.
 
-voicequal computes four metrics per audio frame:
+## How it works
 
-- **SNR** — signal-to-noise ratio (dB)
-- **Spectral flatness** — how "noise-like" vs "tonal" the spectrum is
-- **Temporal variance** — is background noise sustained or transient
-- **Room loudness** — dBA-scale loudness of the current environment
+voicequal is built around **SNR-gated tiered assessment**. The
+intuition: a loud room only matters if your voice isn't dominant.
+So SNR gates the loudness penalty before it applies.
 
-It then applies an **SNR-gated tier decision**:
+```text
+SNR > 50 dB          → excellent (voice dominates completely)
+SNR 35-50            → excellent unless room > 72 dBA
+SNR 25-35            → depends on room loudness
+SNR ≤ 25             → composite score across all four metrics
+```
 
-- If SNR > 50 → `excellent` (voice dominates; room doesn't matter)
-- If SNR > 35 → `excellent` unless the room is very loud (> 72 dBA) → `good`
-- If SNR > 25 → depends on room loudness
-- If SNR ≤ 25 → a composite score of all four metrics decides the tier
+The four metrics feeding this decision:
 
-The SNR gate is what separates this from naive "just measure dBA" libraries.
-A loud room with a dominant voice signal is different from a loud room with
-only ambient noise, and the algorithm reflects that.
+| Metric               | What it captures                                          |
+|----------------------|-----------------------------------------------------------|
+| SNR                  | How much louder the peak bin is than the noise floor      |
+| Spectral flatness    | How "noise-like" (chaotic) vs "tonal" (structured) it is  |
+| Temporal variance    | Is noise sustained (fan) or transient (a passing car)     |
+| Background dBA       | Overall room loudness, using minimum statistics tracking  |
 
-## Streaming details
+Streaming is stabilized with a **hysteresis buffer** — a new tier
+has to persist for 3 frames before it's announced, so single-frame
+blips don't cause flicker.
 
-`LiveDetector` uses a ring buffer to accept any chunk size, computes metrics
-per 2048-sample frame with a 1600-sample hop (~10 Hz analysis rate), and
-fires an `on_change` callback only when the quality tier changes and holds
-for `stability_frames` consecutive frames (default 3). This prevents
-single-frame flicker.
+Noise floor is estimated with the **10th percentile** of recent
+RMS values (robust to voice bursts, decays when room quiets).
+Room loudness is reported as the **median** of recent RMS (tracks
+sustained noise, ignores single-frame silences).
 
-The room-loudness estimator uses the median of a rolling RMS window, so it
-recovers cleanly when noise stops. The noise floor used for SNR uses the 10th
-percentile of the same window — deliberately lower, to reflect the true
-quiet floor even during voice bursts.
+## Limits — read this before using in production
 
-## Calibration
+- **voicequal is calibrated for voice / recording quality.**
+  Whether a recording is *clean enough to process*, not whether it
+  sounds subjectively pleasing to a human.
+- **Not a certified acoustic dB meter.** Background dBA is a
+  calibrated proxy using rough dB conversion, not the IEC 61672
+  A-weighted filter a real SPL meter uses.
+- **Different mics deliver different signal levels.** Run
+  `voicequal listen --calibrate` once per new machine or mic setup.
+- **Assumes reasonable audio input.** No echo cancellation or noise
+  suppression built in. If your OS pre-processes mic audio (macOS
+  Voice Isolation, browser noise suppression), your calibration
+  will account for it — but detection accuracy will vary.
 
-Different mics deliver different signal levels for the same real-world dBA.
-On first `voicequal listen`, you'll be prompted to record 3 seconds of quiet
-and 3 seconds of loud audio. voicequal computes a per-machine offset so the
-dBA readings match your specific mic. The offset is saved to
-`~/.voicequal/calibration.json` and reused.
+## API reference
 
-Re-run with `voicequal listen --calibrate` to recalibrate.
+### `assess(path, target_sample_rate=16000, threshold_offset_db=0.0)`
 
-## Limitations (worth knowing)
+Analyze an audio file. Returns a `FileAssessment` with:
+`quality`, `reason`, `background_db`, `snr`, `spectral_flatness`,
+`temporal_variance`, `primary_score`, `secondary_score`,
+`total_score`, `duration_seconds`, `sample_rate`, `num_frames`.
 
-- **Not a certified acoustic dB meter.** The dBA scale is calibrated
-  per-mic and gives useful relative numbers, not absolute lab-grade
-  measurements.
-- **Calibrated for voice/singing use cases.** The tier thresholds
-  (`> 60` = fair, `> 72` = poor by default) assume a voice-app context.
-  Use `voicequal listen --sensitive` for stricter thresholds on
-  general-purpose testing.
-- **Silence-in silence-out.** If your mic is muted or macOS suppresses
-  the input (Voice Isolation), voicequal will correctly say
-  "excellent" for what looks to it like a very quiet room.
+### `LiveDetector(sample_rate=16000, stability_frames=3, threshold_offset_db=0.0, db_offset=94.0)`
+
+Streaming detector. Methods:
+- `push(samples)` — append audio (any length, float32 numpy array)
+- `on_change(callback)` — fire when the stable tier changes
+- `get_current()` — snapshot the latest `LiveAssessment`
+- `reset()` — clear buffers and history
+
+### CLI
+
+```text
+voicequal --version
+voicequal assess <path>
+voicequal listen [--calibrate] [--reset-calibration]
+                 [--sensitive] [--stability-frames N]
+                 [--heartbeat SECONDS]
+```
 
 ## Development
 
 ```bash
 git clone https://github.com/jiya-singhal/voicequal
 cd voicequal
-poetry install
-poetry run pytest
+poetry install --extras mic
+poetry run pytest -v
 ```
 
-70 tests currently pass across metric computation, rolling stats, tier
-assessment, file pipeline, streaming, CLI, and calibration.
+70 tests, all under `tests/`. The library has no runtime dependencies
+beyond numpy, scipy, soundfile, and rich (CLI). `sounddevice` is
+optional (for live-mic support).
 
 ## License
 
-MIT — see LICENSE.
+MIT. See `LICENSE`.
