@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+.env
+.DS_Store
+*.wav
+!tests/**/*.wav
+!examples/**/*.wav
+
+# Local tooling / orchestration state — not part of the project
+.omc/
