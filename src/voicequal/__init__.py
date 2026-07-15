@@ -3,11 +3,13 @@ from voicequal.assessment import QualityAssessment, assess_quality
 from voicequal.io import load_audio
 from voicequal.live import LiveAssessment, LiveDetector
 from voicequal.metrics import (
+    is_voice_active,
     noise_floor,
     rms,
     snr,
     spectral_concentration,
     spectral_flatness,
+    voice_activity,
 )
 from voicequal.pipeline import FileAssessment, assess
 from voicequal.state import RollingStats

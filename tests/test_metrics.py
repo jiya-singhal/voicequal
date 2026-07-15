@@ -3,7 +3,15 @@
 import numpy as np
 import pytest
 
-from voicequal.metrics import noise_floor, rms, snr, spectral_concentration, spectral_flatness
+from voicequal.metrics import (
+    is_voice_active,
+    noise_floor,
+    rms,
+    snr,
+    spectral_concentration,
+    spectral_flatness,
+    voice_activity,
+)
 
 
 class TestRMS:
@@ -133,3 +141,51 @@ class TestSpectralConcentration:
             frame = rng.standard_normal(1024).astype(np.float32)
             c = spectral_concentration(frame)
             assert 0.0 <= c <= 1.0
+
+
+class TestVoiceActivity:
+    def test_silence_scores_zero(self):
+        frame = np.zeros(2048, dtype=np.float32)
+        assert voice_activity(frame) == 0.0
+
+    def test_empty_scores_zero(self):
+        frame = np.zeros(0, dtype=np.float32)
+        assert voice_activity(frame) == 0.0
+
+    def test_tonal_vowel_scores_high(self):
+        # A pitched tone (stand-in for a voiced vowel) is tonal and
+        # energetic -> should score clearly voice-active.
+        t = np.linspace(0, 1, 16000, endpoint=False)
+        frame = np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        assert voice_activity(frame) > 0.5
+
+    def test_white_noise_scores_zero(self):
+        # Broadband noise clears the energy gate but is spread across
+        # bins, so concentration is below threshold -> score 0.0.
+        rng = np.random.default_rng(seed=42)
+        frame = rng.standard_normal(16000).astype(np.float32)
+        assert voice_activity(frame) == 0.0
+
+    def test_quiet_frame_below_energy_floor_scores_zero(self):
+        # A tone scaled well below the RMS floor is treated as silence.
+        t = np.linspace(0, 1, 16000, endpoint=False)
+        frame = (1e-5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        assert voice_activity(frame) == 0.0
+
+    def test_bounded_between_0_and_1(self):
+        rng = np.random.default_rng(seed=11)
+        t = np.linspace(0, 1, 2048, endpoint=False)
+        frames = [
+            np.zeros(2048, dtype=np.float32),
+            np.sin(2 * np.pi * 300 * t).astype(np.float32),
+            rng.standard_normal(2048).astype(np.float32),
+        ]
+        for frame in frames:
+            assert 0.0 <= voice_activity(frame) <= 1.0
+
+    def test_is_voice_active_agrees_with_score(self):
+        t = np.linspace(0, 1, 16000, endpoint=False)
+        vowel = np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        silence = np.zeros(16000, dtype=np.float32)
+        assert is_voice_active(vowel) is True
+        assert is_voice_active(silence) is False

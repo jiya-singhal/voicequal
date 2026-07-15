@@ -155,3 +155,72 @@ def snr(frame: np.ndarray) -> float:
     peak = float(np.max(db))
     noise = float(np.percentile(filtered, 75.0))
     return max(peak - noise, 0.0)
+
+
+def voice_activity(
+    frame: np.ndarray,
+    rms_floor: float = 1e-3,
+    concentration_threshold: float = 0.2,
+) -> float:
+    """Estimate how voice-like a frame is, in [0.0, 1.0].
+
+    This is a lightweight voice-activity primitive, not a trained VAD.
+    It combines two signals already used elsewhere in voicequal:
+
+      - Energy (RMS): silence has no voice. Frames below ``rms_floor``
+        score 0.0 outright.
+      - Spectral concentration: voiced sound (a pitched vowel with
+        harmonics) puts most of its energy in a few bins; broadband
+        noise spreads energy across all bins. Concentration is what
+        separates "loud vowel" from "loud noise" when both are
+        energetic. See :func:`spectral_concentration`.
+
+    The score is the frame's concentration once it clears the energy
+    gate, rescaled so ``concentration_threshold`` maps to 0.0 and 1.0
+    maps to 1.0. So a tonal vowel scores high, broadband noise scores
+    near 0.0, and silence scores exactly 0.0.
+
+    Deliberately does NOT try to detect unvoiced speech (fricatives,
+    whispers), which are broadband and look noise-like to this test.
+    It is a "voiced energy vs. silence/noise" gate — enough to pool
+    voice-frame energy separately from noise-frame energy for an
+    RMS-domain SNR estimate (the v0.2.0 goal).
+
+    Args:
+        frame: 1D numpy array of audio samples.
+        rms_floor: RMS below which the frame is treated as silence.
+            Default 1e-3 (roughly -60 dBFS).
+        concentration_threshold: Concentration at or below which the
+            frame is treated as fully non-voice. Default 0.2.
+
+    Returns:
+        A float in [0.0, 1.0]. 0.0 for empty, silent, or broadband
+        frames; higher for tonal/voiced frames.
+    """
+    if frame.size == 0:
+        return 0.0
+    if rms(frame) < rms_floor:
+        return 0.0
+    concentration = spectral_concentration(frame)
+    if concentration <= concentration_threshold:
+        return 0.0
+    # Rescale (threshold, 1.0] -> (0.0, 1.0].
+    scaled = (concentration - concentration_threshold) / (1.0 - concentration_threshold)
+    return float(np.clip(scaled, 0.0, 1.0))
+
+
+def is_voice_active(frame: np.ndarray, threshold: float = 0.5) -> bool:
+    """Boolean voice-activity decision for a frame.
+
+    Thin wrapper over :func:`voice_activity`: True when the graded
+    voice-activity score is at least ``threshold``.
+
+    Args:
+        frame: 1D numpy array of audio samples.
+        threshold: Minimum voice_activity score to count as active.
+            Default 0.5.
+
+    Returns:
+        True if the frame is voice-active, else False.
+    """
+    return voice_activity(frame) >= threshold
