@@ -45,3 +45,10 @@ calibration.json
 CLAUDE.md
 VOICEQUAL_EXTRACTION.md
 .omc/
+
+# benchmarks — regenerate test_set locally, don't commit WAVs yet
+benchmarks/test_set/*.wav
+benchmarks/results/*.json
+
+# Local working notes — not shipped
+handoff.md

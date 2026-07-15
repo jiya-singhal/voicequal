@@ -15,7 +15,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from voicequal.assessment import assess_quality
-from voicequal.metrics import noise_floor, rms, snr, spectral_flatness
+from voicequal.metrics import noise_floor, rms, snr, spectral_concentration, spectral_flatness
 from voicequal.pipeline import FRAME_SIZE, HOP_SIZE, STEADY_STATE_TAIL
 from voicequal.state import RollingStats
 
@@ -37,6 +37,7 @@ class LiveAssessment:
     background_db: float
     snr: float
     spectral_flatness: float
+    spectral_concentration: float
     temporal_variance: float
     frames_analyzed: int
 
@@ -79,6 +80,7 @@ class LiveDetector:
         # Steady-state metric history.
         self._snr_history: list[float] = []
         self._flatness_history: list[float] = []
+        self._concentration_history: list[float] = []
         self._background_db_history: list[float] = []
         self._last_temporal_variance: float = 0.0
 
@@ -123,6 +125,7 @@ class LiveDetector:
         frame_rms = rms(frame)
         frame_snr = snr(frame)
         frame_flatness = spectral_flatness(frame)
+        frame_concentration = spectral_concentration(frame)
         frame_noise_floor = noise_floor(frame)
 
         self._stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
@@ -134,6 +137,7 @@ class LiveDetector:
 
         self._snr_history.append(frame_snr)
         self._flatness_history.append(frame_flatness)
+        self._concentration_history.append(frame_concentration)
         self._background_db_history.append(frame_background_db)
         self._last_temporal_variance = frame_temporal_variance
 
@@ -141,6 +145,7 @@ class LiveDetector:
         if len(self._snr_history) > STEADY_STATE_TAIL:
             self._snr_history = self._snr_history[-STEADY_STATE_TAIL:]
             self._flatness_history = self._flatness_history[-STEADY_STATE_TAIL:]
+            self._concentration_history = self._concentration_history[-STEADY_STATE_TAIL:]
             self._background_db_history = self._background_db_history[-STEADY_STATE_TAIL:]
 
         self._frames_analyzed += 1
@@ -153,6 +158,7 @@ class LiveDetector:
         # Aggregate steady-state.
         agg_snr = float(np.mean(self._snr_history))
         agg_flatness = float(np.mean(self._flatness_history))
+        agg_concentration = float(np.mean(self._concentration_history))
         agg_background_db = float(np.mean(self._background_db_history))
         agg_temporal_variance = self._last_temporal_variance
 
@@ -161,6 +167,7 @@ class LiveDetector:
             spectral_flatness=agg_flatness,
             snr=agg_snr,
             temporal_variance=agg_temporal_variance,
+            spectral_concentration=agg_concentration,
             threshold_offset_db=self.threshold_offset_db,
         )
 
@@ -170,6 +177,7 @@ class LiveDetector:
             background_db=agg_background_db,
             snr=agg_snr,
             spectral_flatness=agg_flatness,
+            spectral_concentration=agg_concentration,
             temporal_variance=agg_temporal_variance,
             frames_analyzed=self._frames_analyzed,
         )
@@ -217,6 +225,7 @@ class LiveDetector:
         self._stats.reset()
         self._snr_history.clear()
         self._flatness_history.clear()
+        self._concentration_history.clear()
         self._background_db_history.clear()
         self._last_temporal_variance = 0.0
         self._current_tier = None

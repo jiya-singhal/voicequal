@@ -20,6 +20,7 @@ from voicequal.metrics import (
     noise_floor,
     rms,
     snr,
+    spectral_concentration,
     spectral_flatness,
 )
 from voicequal.state import RollingStats
@@ -41,6 +42,7 @@ class FileAssessment:
         background_db: Aggregated dBA-like background loudness.
         snr: Aggregated signal-to-noise ratio in dB.
         spectral_flatness: Aggregated 0..1 flatness.
+        spectral_concentration: Aggregated 0..1 top-N energy concentration.
         temporal_variance: The final temporal-variance reading.
         primary_score: Composite score primary component (0 if fast path).
         secondary_score: Composite score secondary component.
@@ -55,6 +57,7 @@ class FileAssessment:
     background_db: float
     snr: float
     spectral_flatness: float
+    spectral_concentration: float
     temporal_variance: float
     primary_score: float
     secondary_score: float
@@ -109,6 +112,7 @@ def assess(
     rms_values: list[float] = []
     snr_values: list[float] = []
     flatness_values: list[float] = []
+    concentration_values: list[float] = []
     noise_floor_values: list[float] = []
     background_db_values: list[float] = []
     temporal_variance_values: list[float] = []
@@ -117,6 +121,7 @@ def assess(
         frame_rms = rms(frame)
         frame_snr = snr(frame)
         frame_flatness = spectral_flatness(frame)
+        frame_concentration = spectral_concentration(frame)
         frame_noise_floor = noise_floor(frame)
 
         stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
@@ -127,6 +132,7 @@ def assess(
         rms_values.append(frame_rms)
         snr_values.append(frame_snr)
         flatness_values.append(frame_flatness)
+        concentration_values.append(frame_concentration)
         noise_floor_values.append(frame_noise_floor)
         background_db_values.append(frame_background_db)
         temporal_variance_values.append(frame_temporal_variance)
@@ -143,6 +149,7 @@ def assess(
     agg_background_db = float(np.mean(background_db_values[-tail:]))
     agg_snr = float(np.mean(snr_values[-tail:]))
     agg_flatness = float(np.mean(flatness_values[-tail:]))
+    agg_concentration = float(np.mean(concentration_values[-tail:]))
     # Temporal variance is already a rolling statistic; use its last reading.
     agg_temporal_variance = float(temporal_variance_values[-1])
 
@@ -151,6 +158,7 @@ def assess(
         spectral_flatness=agg_flatness,
         snr=agg_snr,
         temporal_variance=agg_temporal_variance,
+        spectral_concentration=agg_concentration,
         threshold_offset_db=threshold_offset_db,
     )
 
@@ -160,6 +168,7 @@ def assess(
         background_db=agg_background_db,
         snr=agg_snr,
         spectral_flatness=agg_flatness,
+        spectral_concentration=agg_concentration,
         temporal_variance=agg_temporal_variance,
         primary_score=quality.primary_score,
         secondary_score=quality.secondary_score,

@@ -6,9 +6,10 @@ from voicequal.metrics import (
     noise_floor,
     rms,
     snr,
+    spectral_concentration,
     spectral_flatness,
 )
 from voicequal.pipeline import FileAssessment, assess
 from voicequal.state import RollingStats
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

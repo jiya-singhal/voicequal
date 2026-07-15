@@ -40,6 +40,7 @@ def assess_quality(
     spectral_flatness: float,
     snr: float,
     temporal_variance: float,
+    spectral_concentration: float = 1.0,   # NEW; default preserves old behavior
     threshold_offset_db: float = 0.0,
 ) -> QualityAssessment:
     """Assess overall audio quality from four metrics.
@@ -65,35 +66,35 @@ def assess_quality(
     # SNR-gated fast paths (the "voice dominates" shortcut):
 
     # CASE 1: Very high SNR (>50) -> excellent, no matter what.
-    if snr > 50:
+    if snr > 50 and spectral_concentration > 0.4:
         return QualityAssessment(
             quality="excellent",
             primary_score=0.0,
             secondary_score=0.0,
             total_score=0.0,
-            reason="snr>50: voice dominates completely",
+            reason="snr>50 with concentration>0.4: voice dominates completely",
         )
 
     # CASE 2: High SNR (35-50).
-    if snr > 35:
+    if snr > 35 and spectral_concentration > 0.3:
         if background_db > (72 - threshold_offset_db):
             return QualityAssessment(
                 quality="good",
                 primary_score=0.0,
                 secondary_score=0.0,
                 total_score=0.0,
-                reason="35<snr<=50 but bgDB>72: possible noise mixed with voice",
+                reason="35<snr<=50 with concentration>0.3 but bgDB>72: possible noise mixed with voice",
             )
         return QualityAssessment(
             quality="excellent",
             primary_score=0.0,
             secondary_score=0.0,
             total_score=0.0,
-            reason="35<snr<=50 with clean room: excellent",
+            reason="35<snr<=50 with concentration>0.3, clean room: excellent",
         )
 
     # CASE 3: Moderate SNR (25-35).
-    if snr > 25:
+    if snr > 25 and spectral_concentration > 0.2:
         if background_db > (70 - threshold_offset_db):
             return QualityAssessment(
                 quality="fair",

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from voicequal.metrics import noise_floor, rms, snr, spectral_flatness
+from voicequal.metrics import noise_floor, rms, snr, spectral_concentration, spectral_flatness
 
 
 class TestRMS:
@@ -104,3 +104,32 @@ class TestSNR:
         t = np.linspace(0, 1, 16000, endpoint=False)
         sine = np.sin(2 * np.pi * 440 * t).astype(np.float32)
         assert snr(noise) < snr(sine)
+
+
+class TestSpectralConcentration:
+    def test_silence_returns_zero(self):
+        frame = np.zeros(2048, dtype=np.float32)
+        assert spectral_concentration(frame) == 0.0
+
+    def test_pure_sine_is_highly_concentrated(self):
+        # A pure sine wave has all its energy in one bin.
+        # Concentration should be very high (>0.9).
+        t = np.linspace(0, 1, 16000, endpoint=False)
+        frame = np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        conc = spectral_concentration(frame)
+        assert conc > 0.9
+
+    def test_white_noise_is_spread(self):
+        # White noise has energy in every bin.
+        # Top 3 out of ~1000 bins should be a tiny fraction of total.
+        rng = np.random.default_rng(seed=42)
+        frame = rng.standard_normal(16000).astype(np.float32)
+        conc = spectral_concentration(frame)
+        assert conc < 0.1
+
+    def test_bounded_between_0_and_1(self):
+        rng = np.random.default_rng(seed=7)
+        for _ in range(5):
+            frame = rng.standard_normal(1024).astype(np.float32)
+            c = spectral_concentration(frame)
+            assert 0.0 <= c <= 1.0

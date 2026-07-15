@@ -50,6 +50,38 @@ def spectral_flatness(frame: np.ndarray) -> float:
     return float(np.clip(geometric_mean / np.mean(power), 0.0, 1.0))
 
 
+def spectral_concentration(frame: np.ndarray, top_n: int = 3) -> float:
+    """Ratio of energy in the top-N loudest bins to total energy.
+
+    A measure of how "concentrated" the spectrum is:
+      - Near 1.0: energy is concentrated in a few bins (pure tones, clean voice)
+      - Near 0.0: energy is spread evenly across bins (broadband noise)
+
+    Voice typically produces concentration 0.4-0.7 (fundamental + harmonics).
+    Broadband noise typically produces concentration <0.1.
+    Voice mixed with heavy noise: 0.15-0.35.
+
+    Args:
+        frame: 1D numpy array of audio samples.
+        top_n: Number of top bins to include (default 3 = fundamental
+            + first two harmonics for typical voice signals).
+
+    Returns:
+        A float in [0.0, 1.0]. Returns 0.0 for silent or empty frames.
+    """
+    if frame.size == 0 or not np.any(frame):
+        return 0.0
+    power = np.abs(np.fft.rfft(frame)) ** 2
+    # Drop DC bin.
+    power = power[1:]
+    total_energy = float(np.sum(power))
+    if total_energy < 1e-10:
+        return 0.0
+    # Sum of top-N bins.
+    top_energy = float(np.sum(np.sort(power)[-top_n:]))
+    return float(np.clip(top_energy / total_energy, 0.0, 1.0))
+
+
 _HANN_CACHE: dict[int, np.ndarray] = {}
 
 

@@ -196,3 +196,40 @@ class TestThresholdOffset:
         b = assess_quality(65.0, 0.3, 20.0, 8.0, threshold_offset_db=0.0)
         assert a.quality == b.quality
         assert a.total_score == b.total_score
+
+
+class TestConcentrationGate:
+    def test_high_snr_with_low_concentration_no_longer_excellent(self):
+        # Old behavior: snr=60 -> excellent unconditionally
+        # New behavior: snr=60 + concentration=0.1 (noise-like) -> falls through
+        # the gated fast-paths into the composite; a loud room then scores poor.
+        result = assess_quality(
+            background_db=75.0,   # loud room
+            spectral_flatness=0.5,
+            snr=60.0,
+            temporal_variance=8.0,
+            spectral_concentration=0.1,   # LOW: noise-like
+        )
+        assert result.quality != "excellent", (
+            f"Expected fall-through, got excellent. Reason: {result.reason}"
+        )
+
+    def test_high_snr_with_high_concentration_still_excellent(self):
+        result = assess_quality(
+            background_db=55.0,
+            spectral_flatness=0.5,
+            snr=60.0,
+            temporal_variance=8.0,
+            spectral_concentration=0.6,   # HIGH: voice-like
+        )
+        assert result.quality == "excellent"
+
+    def test_default_concentration_preserves_old_behavior(self):
+        # Existing callers don't pass concentration -> default 1.0 -> old behavior
+        result = assess_quality(
+            background_db=55.0,
+            spectral_flatness=0.5,
+            snr=60.0,
+            temporal_variance=8.0,
+        )
+        assert result.quality == "excellent"
