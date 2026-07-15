@@ -22,6 +22,7 @@ from voicequal.metrics import (
     snr,
     spectral_concentration,
     spectral_flatness,
+    voice_activity,
 )
 from voicequal.state import RollingStats
 
@@ -43,6 +44,11 @@ class FileAssessment:
         snr: Aggregated signal-to-noise ratio in dB.
         spectral_flatness: Aggregated 0..1 flatness.
         spectral_concentration: Aggregated 0..1 top-N energy concentration.
+        rms_snr: RMS-domain SNR in dB, estimated by pooling voice-active
+            frame energy against noise-frame energy (voice_activity as a
+            soft weight). INFORMATIONAL ONLY as of v0.2.0 — not yet used
+            in the tier decision. inf if no noise frames were found,
+            0.0 if no voice energy was found.
         temporal_variance: The final temporal-variance reading.
         primary_score: Composite score primary component (0 if fast path).
         secondary_score: Composite score secondary component.
@@ -58,6 +64,7 @@ class FileAssessment:
     snr: float
     spectral_flatness: float
     spectral_concentration: float
+    rms_snr: float
     temporal_variance: float
     primary_score: float
     secondary_score: float
@@ -117,12 +124,23 @@ def assess(
     background_db_values: list[float] = []
     temporal_variance_values: list[float] = []
 
+    # Energy pools for the RMS-domain SNR estimate. Each frame's energy
+    # (rms^2) is split between "voice" and "noise" using voice_activity
+    # as a soft weight, then pooled over the whole file.
+    voice_energy = 0.0
+    noise_energy = 0.0
+
     for frame in _iter_frames(samples, FRAME_SIZE, HOP_SIZE):
         frame_rms = rms(frame)
         frame_snr = snr(frame)
         frame_flatness = spectral_flatness(frame)
         frame_concentration = spectral_concentration(frame)
         frame_noise_floor = noise_floor(frame)
+
+        frame_voice = voice_activity(frame)
+        frame_energy = frame_rms * frame_rms
+        voice_energy += frame_voice * frame_energy
+        noise_energy += (1.0 - frame_voice) * frame_energy
 
         stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
 
@@ -153,6 +171,16 @@ def assess(
     # Temporal variance is already a rolling statistic; use its last reading.
     agg_temporal_variance = float(temporal_variance_values[-1])
 
+    # RMS-domain SNR from the pooled voice/noise energy (whole file, not
+    # just the steady-state tail — we need both classes represented).
+    # inf when no noise energy was found; 0.0 when no voice energy.
+    if voice_energy <= 0.0:
+        rms_snr = 0.0
+    elif noise_energy <= 0.0:
+        rms_snr = float("inf")
+    else:
+        rms_snr = float(10.0 * np.log10(voice_energy / noise_energy))
+
     quality: QualityAssessment = assess_quality(
         background_db=agg_background_db,
         spectral_flatness=agg_flatness,
@@ -169,6 +197,7 @@ def assess(
         snr=agg_snr,
         spectral_flatness=agg_flatness,
         spectral_concentration=agg_concentration,
+        rms_snr=rms_snr,
         temporal_variance=agg_temporal_variance,
         primary_score=quality.primary_score,
         secondary_score=quality.secondary_score,
