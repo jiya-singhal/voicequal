@@ -1,6 +1,6 @@
 """Tests for voicequal.live.LiveDetector."""
 
-from typing import Optional
+import dataclasses
 
 import numpy as np
 import pytest
@@ -8,12 +8,16 @@ import pytest
 from voicequal.live import LiveAssessment, LiveDetector
 
 
-def _sine(frequency: float, duration_s: float, amplitude: float = 0.5, sr: int = 16000) -> np.ndarray:
+def _sine(
+    frequency: float, duration_s: float, amplitude: float = 0.5, sr: int = 16000
+) -> np.ndarray:
     t = np.linspace(0, duration_s, int(duration_s * sr), endpoint=False)
     return (amplitude * np.sin(2 * np.pi * frequency * t)).astype(np.float32)
 
 
-def _white_noise(duration_s: float, amplitude: float = 0.3, seed: int = 42, sr: int = 16000) -> np.ndarray:
+def _white_noise(
+    duration_s: float, amplitude: float = 0.3, seed: int = 42, sr: int = 16000
+) -> np.ndarray:
     rng = np.random.default_rng(seed=seed)
     return (amplitude * rng.standard_normal(int(duration_s * sr))).astype(np.float32)
 
@@ -117,5 +121,5 @@ class TestSnapshotShape:
         det.push(_sine(440.0, duration_s=3.0))  # was 1.0
         snap = det.get_current()
         assert snap is not None
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             snap.quality = "poor"  # type: ignore[misc]

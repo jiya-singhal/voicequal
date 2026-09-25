@@ -9,8 +9,8 @@ aggregation as pipeline.assess(). Adds tier-stability hysteresis so
 the reported quality doesn't flicker on borderline frames.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import numpy as np
 
@@ -85,12 +85,12 @@ class LiveDetector:
         self._last_temporal_variance: float = 0.0
 
         # Hysteresis state.
-        self._current_tier: Optional[str] = None      # last stable tier
-        self._candidate_tier: Optional[str] = None    # tier currently being validated
+        self._current_tier: str | None = None  # last stable tier
+        self._candidate_tier: str | None = None  # tier currently being validated
         self._candidate_streak: int = 0
-        self._latest_assessment: Optional[LiveAssessment] = None
+        self._latest_assessment: LiveAssessment | None = None
 
-        self._on_change_callback: Optional[Callable[[LiveAssessment], None]] = None
+        self._on_change_callback: Callable[[LiveAssessment], None] | None = None
         self._frames_analyzed: int = 0
 
     def on_change(self, callback: Callable[[LiveAssessment], None]) -> None:
@@ -131,7 +131,8 @@ class LiveDetector:
         self._stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
 
         frame_background_db = self._stats.background_db(
-            current_rms=frame_rms, db_offset=self.db_offset,
+            current_rms=frame_rms,
+            db_offset=self.db_offset,
         )
         frame_temporal_variance = self._stats.temporal_variance()
 
@@ -204,10 +205,7 @@ class LiveDetector:
             return
 
         # Subsequent transitions: require the streak.
-        if (
-            self._candidate_streak >= self.stability_frames
-            and new_tier != self._current_tier
-        ):
+        if self._candidate_streak >= self.stability_frames and new_tier != self._current_tier:
             self._current_tier = new_tier
             self._fire_callback()
 
@@ -215,7 +213,7 @@ class LiveDetector:
         if self._on_change_callback is not None and self._latest_assessment is not None:
             self._on_change_callback(self._latest_assessment)
 
-    def get_current(self) -> Optional[LiveAssessment]:
+    def get_current(self) -> LiveAssessment | None:
         """Return the most recent assessment, or None before any frame processed."""
         return self._latest_assessment
 

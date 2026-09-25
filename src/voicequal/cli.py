@@ -24,6 +24,7 @@ from voicequal import __version__
 from voicequal.pipeline import assess
 
 if TYPE_CHECKING:
+    from voicequal import calibration
     from voicequal.live import LiveAssessment
 
 console = Console()
@@ -74,9 +75,10 @@ def _cmd_assess(path: str) -> int:
     return 0
 
 
-def _run_calibration(sample_rate: int, chunk_size: int) -> "calibration.Calibration":
+def _run_calibration(sample_rate: int, chunk_size: int) -> calibration.Calibration:
     import numpy as np
     import sounddevice as sd
+
     from voicequal import calibration
 
     def record(seconds: float) -> np.ndarray:
@@ -85,26 +87,24 @@ def _run_calibration(sample_rate: int, chunk_size: int) -> "calibration.Calibrat
         sd.wait()
         return audio[:, 0] if audio.ndim > 1 else audio
 
-    console.print(
-        "\n[bold cyan]Calibration step 1/2:[/] Sit quietly for 3 seconds..."
-    )
+    console.print("\n[bold cyan]Calibration step 1/2:[/] Sit quietly for 3 seconds...")
     for i in (3, 2, 1):
         console.print(f"  starting in {i}...")
         time.sleep(1)
     console.print("[dim]Recording quiet room...[/]")
     quiet = record(3.0)
-    quiet_rms = float(np.sqrt(np.mean(quiet ** 2)))
+    quiet_rms = float(np.sqrt(np.mean(quiet**2)))
 
     console.print(
-        f"\n[bold cyan]Calibration step 2/2:[/] Now make LOUD noise "
-        f"(play music, yell, clap) for 3 seconds..."
+        "\n[bold cyan]Calibration step 2/2:[/] Now make LOUD noise "
+        "(play music, yell, clap) for 3 seconds..."
     )
     for i in (3, 2, 1):
         console.print(f"  starting in {i}...")
         time.sleep(1)
     console.print("[dim]Recording loud room...[/]")
     loud = record(3.0)
-    loud_rms = float(np.sqrt(np.mean(loud ** 2)))
+    loud_rms = float(np.sqrt(np.mean(loud**2)))
 
     offset = calibration.compute_offset(quiet_rms=quiet_rms, loud_rms=loud_rms)
 
@@ -158,9 +158,7 @@ def _cmd_listen(
     cal = calibration.load()
     if calibrate or cal is None:
         if cal is None and not calibrate:
-            console.print(
-                "[yellow]No calibration found. Running first-time calibration...[/]"
-            )
+            console.print("[yellow]No calibration found. Running first-time calibration...[/]")
         cal = _run_calibration(sample_rate, chunk_size)
 
     db_offset = cal.db_offset
@@ -173,7 +171,7 @@ def _cmd_listen(
         db_offset=db_offset,
     )
 
-    def print_change(a: "LiveAssessment") -> None:
+    def print_change(a: LiveAssessment) -> None:
         ts = time.strftime("%H:%M:%S")
         qual = _quality_text(a.quality)
         console.print(

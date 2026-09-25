@@ -40,7 +40,7 @@ def assess_quality(
     spectral_flatness: float,
     snr: float,
     temporal_variance: float,
-    spectral_concentration: float = 1.0,   # NEW; default preserves old behavior
+    spectral_concentration: float = 1.0,  # NEW; default preserves old behavior
     threshold_offset_db: float = 0.0,
 ) -> QualityAssessment:
     """Assess overall audio quality from four metrics.

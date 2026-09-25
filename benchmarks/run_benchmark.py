@@ -17,9 +17,7 @@ import csv
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
 
-import numpy as np
 from scipy.stats import spearmanr
 
 from voicequal import __version__, assess
@@ -39,10 +37,11 @@ class ClipResult:
     expected_tier: str
     predicted_tier: str
     category: str
-    snr_db: Optional[float]
+    snr_db: float | None
     background_db: float
     snr_measured: float
     spectral_flatness: float
+    spectral_concentration: float
     temporal_variance: float
     reason: str
 
@@ -71,7 +70,7 @@ def load_manifest(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def run(limit: Optional[int] = None) -> tuple[BenchmarkReport, list[ClipResult]]:
+def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
     rows = load_manifest(MANIFEST_PATH)
     if limit:
         rows = rows[:limit]
@@ -91,6 +90,7 @@ def run(limit: Optional[int] = None) -> tuple[BenchmarkReport, list[ClipResult]]
                 background_db=r.background_db,
                 snr_measured=r.snr,
                 spectral_flatness=r.spectral_flatness,
+                spectral_concentration=r.spectral_concentration,
                 temporal_variance=r.temporal_variance,
                 reason=r.reason,
             )
@@ -144,7 +144,7 @@ def print_report(report: BenchmarkReport) -> None:
     print(f"Off-by-one accuracy:     {report.off_by_one_accuracy:.1%}")
     print(f"Spearman correlation:    {report.spearman_correlation:+.3f}")
 
-    print(f"\nPer-category accuracy:")
+    print("\nPer-category accuracy:")
     print(f"{'category':<25s} {'count':>6s} {'exact':>8s} {'±1 tier':>10s}")
     for cat, m in sorted(report.per_category.items()):
         print(
@@ -152,7 +152,7 @@ def print_report(report: BenchmarkReport) -> None:
             f"{m['exact_accuracy']:>7.1%} {m['off_by_one_accuracy']:>10.1%}"
         )
 
-    print(f"\nConfusion matrix (rows = expected, cols = predicted):")
+    print("\nConfusion matrix (rows = expected, cols = predicted):")
     header = "  " + " " * 12 + " ".join(f"{p:>10s}" for p in TIER_ORDER)
     print(header)
     for exp in TIER_ORDER:
@@ -179,14 +179,13 @@ def save_results(report: BenchmarkReport, results: list[ClipResult]) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=None,
-                        help="Only run first N clips (for smoke tests)")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Only run first N clips (for smoke tests)"
+    )
     args = parser.parse_args()
 
     if not TEST_SET_DIR.exists() or not MANIFEST_PATH.exists():
-        raise SystemExit(
-            "Missing benchmark data. Run benchmarks/generate_test_set.py first."
-        )
+        raise SystemExit("Missing benchmark data. Run benchmarks/generate_test_set.py first.")
 
     report, results = run(limit=args.limit)
     print_report(report)

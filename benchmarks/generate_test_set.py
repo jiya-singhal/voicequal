@@ -30,8 +30,8 @@ SEED = 42
 # Per-category counts.
 N_CLEAN_VOCAL = 40
 N_QUIET_NOISE = 40
-N_MODERATE_SNR = 40   # target ~ 20 dB SNR
-N_LOUD_SNR = 40       # target ~ 10 dB SNR
+N_MODERATE_SNR = 40  # target ~ 20 dB SNR
+N_LOUD_SNR = 40  # target ~ 10 dB SNR
 N_VERY_LOUD_SNR = 40  # target ~ 5 dB SNR
 
 MODERATE_SNR_DB = 20.0
@@ -162,7 +162,7 @@ def main() -> None:
     args = parser.parse_args()
 
     random.seed(SEED)
-    np.random.seed(SEED)
+    np.random.seed(SEED)  # noqa: NPY002 -- legacy seeding keeps the test set bit-identical
 
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -224,7 +224,9 @@ def main() -> None:
         manifest.append(TestClip(fname, "excellent", "quiet_noise", None, "", npath.name))
 
     # --- Category 3: moderate SNR -> good ---
-    print(f"Generating {N_MODERATE_SNR} moderate-SNR mixes (target {MODERATE_SNR_DB} dB, expected: good)...")
+    print(
+        f"Generating {N_MODERATE_SNR} moderate-SNR mixes (target {MODERATE_SNR_DB} dB, expected: good)..."
+    )
     for i in range(N_MODERATE_SNR):
         vpath, voice = next_vocal()
         npath, noise = next_noise()
@@ -233,7 +235,9 @@ def main() -> None:
         mixed = mix_at_snr(voice, noise, MODERATE_SNR_DB)
         fname = f"good_snr{int(MODERATE_SNR_DB)}_{i:03d}.wav"
         sf.write(output_dir / fname, mixed, TARGET_SAMPLE_RATE)
-        manifest.append(TestClip(fname, "good", "moderate_snr", MODERATE_SNR_DB, vpath.name, npath.name))
+        manifest.append(
+            TestClip(fname, "good", "moderate_snr", MODERATE_SNR_DB, vpath.name, npath.name)
+        )
 
     # --- Category 4: loud SNR -> fair ---
     print(f"Generating {N_LOUD_SNR} loud-SNR mixes (target {LOUD_SNR_DB} dB, expected: fair)...")
@@ -248,7 +252,9 @@ def main() -> None:
         manifest.append(TestClip(fname, "fair", "loud_snr", LOUD_SNR_DB, vpath.name, npath.name))
 
     # --- Category 5: very loud SNR -> poor ---
-    print(f"Generating {N_VERY_LOUD_SNR} very-loud-SNR mixes (target {VERY_LOUD_SNR_DB} dB, expected: poor)...")
+    print(
+        f"Generating {N_VERY_LOUD_SNR} very-loud-SNR mixes (target {VERY_LOUD_SNR_DB} dB, expected: poor)..."
+    )
     for i in range(N_VERY_LOUD_SNR):
         vpath, voice = next_vocal()
         npath, noise = next_noise()
@@ -257,21 +263,27 @@ def main() -> None:
         mixed = mix_at_snr(voice, noise, VERY_LOUD_SNR_DB)
         fname = f"poor_snr{int(VERY_LOUD_SNR_DB)}_{i:03d}.wav"
         sf.write(output_dir / fname, mixed, TARGET_SAMPLE_RATE)
-        manifest.append(TestClip(fname, "poor", "very_loud_snr", VERY_LOUD_SNR_DB, vpath.name, npath.name))
+        manifest.append(
+            TestClip(fname, "poor", "very_loud_snr", VERY_LOUD_SNR_DB, vpath.name, npath.name)
+        )
 
     # Write manifest.
     with open(manifest_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["filename", "expected_tier", "category", "snr_db", "voice_source", "noise_source"])
+        writer.writerow(
+            ["filename", "expected_tier", "category", "snr_db", "voice_source", "noise_source"]
+        )
         for clip in manifest:
-            writer.writerow([
-                clip.filename,
-                clip.expected_tier,
-                clip.category,
-                "" if clip.snr_db is None else f"{clip.snr_db:.1f}",
-                clip.voice_source,
-                clip.noise_source,
-            ])
+            writer.writerow(
+                [
+                    clip.filename,
+                    clip.expected_tier,
+                    clip.category,
+                    "" if clip.snr_db is None else f"{clip.snr_db:.1f}",
+                    clip.voice_source,
+                    clip.noise_source,
+                ]
+            )
 
     print(f"\nWrote {len(manifest)} test clips to {output_dir}")
     print(f"Wrote manifest to {manifest_path}")

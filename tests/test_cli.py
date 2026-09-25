@@ -4,14 +4,13 @@ import os
 import tempfile
 
 import numpy as np
-import pytest
 import soundfile as sf
 
 from voicequal.cli import build_parser, main
 
 
 def _write_wav(samples: np.ndarray, sample_rate: int) -> str:
-    f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)  # noqa: SIM115
     f.close()
     sf.write(f.name, samples, sample_rate)
     return f.name

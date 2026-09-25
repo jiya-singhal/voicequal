@@ -6,6 +6,7 @@ around 0.05+). If it's silent (permissions issue), you'll see 0.0000000.
 
 import sys
 import time
+
 import numpy as np
 import sounddevice as sd
 
@@ -22,6 +23,7 @@ print()
 
 start = time.time()
 
+
 def cb(indata, frames, time_info, status):
     if status:
         print(f"[status] {status}", file=sys.stderr)
@@ -29,6 +31,7 @@ def cb(indata, frames, time_info, status):
     rms = float(np.sqrt(np.mean(chunk**2)))
     peak = float(np.max(np.abs(chunk)))
     print(f"chunk: rms={rms:.6f}  peak={peak:.6f}  shape={indata.shape}")
+
 
 with sd.InputStream(
     samplerate=SAMPLE_RATE,

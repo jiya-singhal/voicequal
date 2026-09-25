@@ -1,16 +1,18 @@
 """Tests for voicequal.assessment.assess_quality."""
 
+import dataclasses
+
 import pytest
 
-from voicequal.assessment import QualityAssessment, assess_quality
+from voicequal.assessment import assess_quality
 
 
 class TestSNRFastPaths:
     def test_very_high_snr_is_excellent(self):
         # snr>50 should short-circuit to excellent regardless of room.
         result = assess_quality(
-            background_db=80.0,      # very loud room
-            spectral_flatness=0.9,    # noise-like
+            background_db=80.0,  # very loud room
+            spectral_flatness=0.9,  # noise-like
             snr=60.0,
             temporal_variance=1.0,
         )
@@ -28,25 +30,25 @@ class TestSNRFastPaths:
 
     def test_high_snr_with_very_loud_room_downgrades_to_good(self):
         result = assess_quality(
-            background_db=75.0,       # >72
+            background_db=75.0,  # >72
             spectral_flatness=0.5,
-            snr=40.0,                  # 35<snr<=50
+            snr=40.0,  # 35<snr<=50
             temporal_variance=6.0,
         )
         assert result.quality == "good"
 
     def test_moderate_snr_with_loud_room_is_fair(self):
         result = assess_quality(
-            background_db=71.0,       # >70
+            background_db=71.0,  # >70
             spectral_flatness=0.5,
-            snr=30.0,                  # 25<snr<=35
+            snr=30.0,  # 25<snr<=35
             temporal_variance=6.0,
         )
         assert result.quality == "fair"
 
     def test_moderate_snr_with_moderate_room_is_good(self):
         result = assess_quality(
-            background_db=65.0,       # 60<bg<=70
+            background_db=65.0,  # 60<bg<=70
             spectral_flatness=0.5,
             snr=30.0,
             temporal_variance=6.0,
@@ -162,7 +164,7 @@ class TestResultFields:
         result = assess_quality(
             background_db=40.0, spectral_flatness=0.3, snr=60.0, temporal_variance=6.0
         )
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             # frozen dataclass -> cannot mutate
             result.quality = "poor"  # type: ignore[misc]
 
@@ -179,12 +181,16 @@ class TestThresholdOffset:
         # Default: primary=3 (bg>60) -> good
         # With offset=8: bg>60-8=52 -> primary=3, but bg>67-8=59 -> primary=5 -> fair
         default_result = assess_quality(
-            background_db=62.0, spectral_flatness=0.3,
-            snr=20.0, temporal_variance=8.0,
+            background_db=62.0,
+            spectral_flatness=0.3,
+            snr=20.0,
+            temporal_variance=8.0,
         )
         sensitive_result = assess_quality(
-            background_db=62.0, spectral_flatness=0.3,
-            snr=20.0, temporal_variance=8.0,
+            background_db=62.0,
+            spectral_flatness=0.3,
+            snr=20.0,
+            temporal_variance=8.0,
             threshold_offset_db=8.0,
         )
         assert default_result.quality in {"good", "excellent"}
@@ -204,11 +210,11 @@ class TestConcentrationGate:
         # New behavior: snr=60 + concentration=0.1 (noise-like) -> falls through
         # the gated fast-paths into the composite; a loud room then scores poor.
         result = assess_quality(
-            background_db=75.0,   # loud room
+            background_db=75.0,  # loud room
             spectral_flatness=0.5,
             snr=60.0,
             temporal_variance=8.0,
-            spectral_concentration=0.1,   # LOW: noise-like
+            spectral_concentration=0.1,  # LOW: noise-like
         )
         assert result.quality != "excellent", (
             f"Expected fall-through, got excellent. Reason: {result.reason}"
@@ -220,7 +226,7 @@ class TestConcentrationGate:
             spectral_flatness=0.5,
             snr=60.0,
             temporal_variance=8.0,
-            spectral_concentration=0.6,   # HIGH: voice-like
+            spectral_concentration=0.6,  # HIGH: voice-like
         )
         assert result.quality == "excellent"
 

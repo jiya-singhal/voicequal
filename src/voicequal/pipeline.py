@@ -6,7 +6,6 @@ quality assessment into one call.
 """
 
 from dataclasses import dataclass
-from typing import Union
 from pathlib import Path
 
 import numpy as np
@@ -80,7 +79,7 @@ def _iter_frames(samples: np.ndarray, frame_size: int, hop_size: int):
 
 
 def assess(
-    path: Union[str, Path],
+    path: str | Path,
     target_sample_rate: int = 16000,
     threshold_offset_db: float = 0.0,
 ) -> FileAssessment:

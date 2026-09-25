@@ -1,7 +1,5 @@
 """Tests for voicequal.state.RollingStats."""
 
-import math
-
 import pytest
 
 from voicequal.state import RollingStats
@@ -32,8 +30,7 @@ class TestTemporalVariance:
         s = RollingStats()
         # First 20 wildly varying values...
         for i in range(20):
-            s.update(current_noise_floor=(-30.0 if i % 2 else -70.0),
-                     current_rms=0.01)
+            s.update(current_noise_floor=(-30.0 if i % 2 else -70.0), current_rms=0.01)
         # ...then 20 constant values. History should evict the old ones.
         for _ in range(20):
             s.update(current_noise_floor=-40.0, current_rms=0.01)

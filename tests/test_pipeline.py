@@ -1,5 +1,6 @@
 """Tests for voicequal.pipeline.assess."""
 
+import dataclasses
 import os
 import tempfile
 
@@ -11,7 +12,7 @@ from voicequal.pipeline import FileAssessment, assess
 
 
 def _write_wav(samples: np.ndarray, sample_rate: int) -> str:
-    f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)  # noqa: SIM115
     f.close()
     sf.write(f.name, samples, sample_rate)
     return f.name
@@ -90,7 +91,7 @@ class TestFileAssessmentShape:
         path = _write_wav(samples, sample_rate)
         try:
             result = assess(path)
-            with pytest.raises(Exception):
+            with pytest.raises(dataclasses.FrozenInstanceError):
                 result.quality = "poor"  # type: ignore[misc]
         finally:
             os.unlink(path)
@@ -103,9 +104,13 @@ class TestFileAssessmentShape:
         try:
             result = assess(path)
             for field in [
-                result.background_db, result.snr, result.spectral_flatness,
-                result.temporal_variance, result.primary_score,
-                result.secondary_score, result.total_score,
+                result.background_db,
+                result.snr,
+                result.spectral_flatness,
+                result.temporal_variance,
+                result.primary_score,
+                result.secondary_score,
+                result.total_score,
                 result.duration_seconds,
             ]:
                 assert np.isfinite(field), f"non-finite value: {field}"

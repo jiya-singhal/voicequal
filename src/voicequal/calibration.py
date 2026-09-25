@@ -9,10 +9,8 @@ algorithm's internal dBA scale.
 """
 
 import json
-import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -37,7 +35,7 @@ def save(cal: Calibration) -> None:
     CALIBRATION_PATH.write_text(json.dumps(asdict(cal), indent=2))
 
 
-def load() -> Optional[Calibration]:
+def load() -> Calibration | None:
     if not CALIBRATION_PATH.exists():
         return None
     try:

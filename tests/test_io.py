@@ -17,7 +17,7 @@ def test_load_mono_at_target_rate():
     t = np.linspace(0.0, duration, n_samples, endpoint=False)
     sine = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)  # noqa: SIM115
     tmp.close()
     try:
         sf.write(tmp.name, sine, sample_rate)
@@ -38,7 +38,7 @@ def test_load_stereo_averages_to_mono():
     right = np.full(n_samples, -0.5, dtype=np.float32)
     stereo = np.stack([left, right], axis=1)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)  # noqa: SIM115
     tmp.close()
     try:
         sf.write(tmp.name, stereo, sample_rate)
@@ -59,7 +59,7 @@ def test_resample_downsamples_correctly():
     t = np.linspace(0.0, duration, n_samples, endpoint=False)
     sine = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)  # noqa: SIM115
     tmp.close()
     try:
         sf.write(tmp.name, sine, source_rate)
