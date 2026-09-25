@@ -1,0 +1,53 @@
+site_name: voicequal
+site_description: Real-time audio quality assessment for voice apps.
+site_url: https://jiya-singhal.github.io/voicequal/
+repo_url: https://github.com/jiya-singhal/voicequal
+repo_name: jiya-singhal/voicequal
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.footer
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Quick start: quickstart.md
+  - How it works: how-it-works.md
+  - Benchmark: benchmark.md
+  - API reference: api.md
+  - CLI: cli.md
+  - Roadmap: roadmap.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+plugins:
+  - search

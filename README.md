@@ -1,5 +1,11 @@
 # voicequal
 
+[![CI](https://github.com/jiya-singhal/voicequal/actions/workflows/ci.yml/badge.svg)](https://github.com/jiya-singhal/voicequal/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/voicequal.svg)](https://pypi.org/project/voicequal/)
+[![Python](https://img.shields.io/pypi/pyversions/voicequal.svg)](https://pypi.org/project/voicequal/)
+[![Docs](https://img.shields.io/badge/docs-github%20pages-blue)](https://jiya-singhal.github.io/voicequal/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Real-time audio quality assessment for voice apps.
 
 Answers the question every voice app eventually has to answer:
@@ -33,10 +39,10 @@ pip install 'voicequal[mic]'       # + live-mic support
 from voicequal import assess
 
 result = assess("recording.wav")
-print(result.quality)          # "good"
-print(result.background_db)    # 52.3
-print(result.snr)              # 24.1
-print(result.reason)           # "25<snr<=35 with moderate room: good"
+print(result.quality)  # "good"
+print(result.background_db)  # 52.3
+print(result.snr)  # 24.1
+print(result.reason)  # "25<snr<=35 with moderate room: good"
 ```
 
 ### Real-time streaming
@@ -48,7 +54,7 @@ detector = LiveDetector()
 detector.on_change(lambda result: print(f"→ {result.quality}"))
 
 while streaming:
-    chunk = get_audio_chunk()   # any float32 numpy array
+    chunk = get_audio_chunk()  # any float32 numpy array
     detector.push(chunk)
 ```
 
@@ -204,6 +210,13 @@ voicequal listen [--calibrate] [--reset-calibration]
                  [--heartbeat SECONDS]
 ```
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md). Short version: fix the mixing-SNR blind
+spot (v0.2.0), emit ITU-T P.835-style SIG/BAK/OVRL scores and benchmark
+against DNSMOS (v0.3.0), then distil a ~1 MB ONNX quality model and add
+noise-type classification (v0.4.0).
+
 ## Development
 
 ```bash
@@ -211,9 +224,15 @@ git clone https://github.com/jiya-singhal/voicequal
 cd voicequal
 poetry install --extras mic
 poetry run pytest -v
+poetry run ruff check . && poetry run ruff format --check .
+poetry run mypy
 ```
 
-75 tests, all under `tests/`. The library has no runtime dependencies
+Contributions welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first,
+especially the rule about benchmark numbers for any change to the tier
+logic.
+
+75 tests, all under `tests/`. CI runs them on Python 3.10, 3.11, and 3.12. The library has no runtime dependencies
 beyond numpy, scipy, soundfile, and rich (CLI). `sounddevice` is
 optional (for live-mic support).
 
