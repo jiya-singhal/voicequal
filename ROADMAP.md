@@ -42,8 +42,8 @@ Goal: make the repo look and behave like a maintained project.
 - [x] GitHub Actions CI: pytest on Python 3.10 / 3.11 / 3.12, ruff, mypy.
 - [x] `ruff` and `mypy` configured in `pyproject.toml`, codebase passes both.
 - [x] `__version__` derived from package metadata so it cannot drift from `pyproject.toml`.
-- [ ] `CHANGELOG.md`, `CONTRIBUTING.md`, issue and PR templates.
-- [ ] Docs site (MkDocs Material) deployed to GitHub Pages.
+- [x] `CHANGELOG.md`, `CONTRIBUTING.md`, issue and PR templates.
+- [x] Docs site (MkDocs Material) deployed to GitHub Pages.
 - [x] Repo topics and description set on GitHub.
 - [x] Benchmark runner records `spectral_concentration` and any new informational fields.
 
