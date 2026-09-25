@@ -52,3 +52,6 @@ benchmarks/results/*.json
 
 # Local working notes — not shipped
 handoff.md
+
+# MkDocs build output
+site/
