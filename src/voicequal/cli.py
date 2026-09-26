@@ -63,7 +63,9 @@ def _cmd_assess(path: str) -> int:
     table.add_row("Reason", result.reason)
     table.add_row("", "")
     table.add_row("Background", f"{result.background_db:.1f} dBA")
-    table.add_row("SNR", f"{result.snr:.1f} dB")
+    table.add_row("HNR", f"{result.hnr:.1f} dB")
+    table.add_row("SNR (spectral)", f"{result.snr:.1f} dB")
+    table.add_row("Clipping", f"{result.clipping_ratio:.1%}")
     table.add_row("Flatness", f"{result.spectral_flatness:.2f}")
     table.add_row("Temporal variance", f"{result.temporal_variance:.2f}")
     table.add_row("", "")
@@ -177,7 +179,7 @@ def _cmd_listen(
         console.print(
             f"[dim]{ts}[/]  [bold cyan]CHANGE[/]  ",
             qual,
-            f"  SNR=[bold]{a.snr:5.1f}[/]dB  "
+            f"  HNR=[bold]{a.hnr:5.1f}[/]dB  "
             f"bgDB=[bold]{a.background_db:5.1f}[/]  "
             f"flat=[bold]{a.spectral_flatness:.2f}[/]  "
             f"var=[bold]{a.temporal_variance:.1f}[/]",
@@ -254,7 +256,7 @@ def _cmd_listen(
                             f"[dim]{ts}[/]  ",
                             qual,
                             f"  room=[bold {bg_color}]{bg:5.1f} dBA[/]  ",
-                            f"SNR={current.snr:5.1f}dB  flat={current.spectral_flatness:.2f}",
+                            f"HNR={current.hnr:5.1f}dB  SNR={current.snr:5.1f}dB",
                             sep="",
                         )
                     last_hb = now

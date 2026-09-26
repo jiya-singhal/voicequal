@@ -3,6 +3,9 @@ from voicequal.assessment import QualityAssessment, assess_quality
 from voicequal.io import load_audio
 from voicequal.live import LiveAssessment, LiveDetector
 from voicequal.metrics import (
+    clipping_ratio,
+    harmonic_ratio,
+    hnr,
     noise_floor,
     rms,
     snr,
@@ -39,6 +42,9 @@ __all__ = [
     "assess",
     "assess_quality",
     "calibration",
+    "clipping_ratio",
+    "harmonic_ratio",
+    "hnr",
     "load_audio",
     "noise_floor",
     "rms",

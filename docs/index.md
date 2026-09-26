@@ -5,13 +5,13 @@ Real-time audio quality assessment for voice apps.
 Answers the question every voice app eventually has to answer:
 **"is this recording clean enough to process?"**
 
-voicequal analyzes audio using four acoustic metrics and returns a
+voicequal analyzes audio with a handful of acoustic metrics, led by the harmonic-to-noise ratio, and returns a
 tier, `excellent`, `good`, `fair`, or `poor`, plus the numbers behind
 the decision.
 
 ```text
 $ voicequal listen
-[15:26:37]  EXCELLENT   room= 45.5 dBA   SNR=18.4dB
+[15:26:37]  EXCELLENT   room= 45.5 dBA   HNR=18.4dB
 [15:26:53]  CHANGE  GOOD   room= 55.0 dBA
 [15:26:59]  CHANGE  FAIR   room= 60.4 dBA
 [15:27:09]  CHANGE  POOR   room= 71.4 dBA
@@ -29,8 +29,8 @@ pip install 'voicequal[mic]'       # + live-mic support
 
 - [Quick start](quickstart.md): file analysis, streaming, and the CLI in
   five minutes.
-- [How it works](how-it-works.md): the SNR-gated tier logic and the four
-  metrics.
+- [How it works](how-it-works.md): the HNR-gated tier logic and the
+  metrics behind it.
 - [Benchmark](benchmark.md): the honest numbers, including the weak
   category.
 - [API reference](api.md) and [CLI](cli.md).

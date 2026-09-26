@@ -11,6 +11,14 @@ from typing import Literal
 
 Quality = Literal["excellent", "good", "fair", "poor"]
 
+# HNR-gated thresholds (v0.2.0). Chosen on the 200-clip benchmark: see
+# ROADMAP.md Phase 1 and the README benchmark section for the numbers and
+# the caveat that they were tuned on that set.
+QUIET_ROOM_DB: float = 60.0
+HNR_EXCELLENT_DB: float = 14.5
+HNR_GOOD_DB: float = 11.0
+HNR_FAIR_DB: float = 7.0
+
 
 @dataclass(frozen=True)
 class QualityAssessment:
@@ -40,13 +48,21 @@ def assess_quality(
     spectral_flatness: float,
     snr: float,
     temporal_variance: float,
-    spectral_concentration: float = 1.0,  # NEW; default preserves old behavior
+    spectral_concentration: float = 1.0,
     threshold_offset_db: float = 0.0,
+    hnr: float | None = None,
 ) -> QualityAssessment:
-    """Assess overall audio quality from four metrics.
+    """Assess overall audio quality from the aggregated metrics.
 
-    Uses SNR-gated tiered assessment. High SNR means voice dominates
-    background noise; low SNR falls through to a composite score.
+    Two decision paths:
+
+    * **HNR-gated (v0.2.0, used when ``hnr`` is given).** A quiet room is
+      excellent regardless. Otherwise the harmonic-to-noise ratio decides
+      the tier directly, because for voice mixed with noise it tracks the
+      mixing SNR that the spectral ``snr`` cannot see.
+    * **Spectral-SNR-gated (v0.1.x, used when ``hnr`` is None).** Kept for
+      backward compatibility. High spectral SNR means voice dominates;
+      low SNR falls through to a composite score.
 
     Args:
         background_db: Estimated background loudness in a dBA-like scale
@@ -59,10 +75,18 @@ def assess_quality(
         threshold_offset_db: Subtracted from each background_db comparison
             threshold. A positive offset makes the algorithm stricter
             (fires on quieter rooms). Default 0.0.
+        hnr: Aggregated harmonic-to-noise ratio in dB (see metrics.hnr).
+            When provided, selects the HNR-gated path.
 
     Returns:
         A QualityAssessment describing the verdict.
     """
+    if hnr is not None:
+        return _assess_hnr_gated(
+            background_db=background_db,
+            hnr=hnr,
+            threshold_offset_db=threshold_offset_db,
+        )
     # SNR-gated fast paths (the "voice dominates" shortcut):
 
     # CASE 1: Very high SNR (>50) -> excellent, no matter what.
@@ -173,3 +197,33 @@ def assess_quality(
         total_score=total,
         reason=f"low-snr composite: primary={primary}, secondary={secondary}",
     )
+
+
+def _assess_hnr_gated(
+    background_db: float,
+    hnr: float,
+    threshold_offset_db: float,
+) -> QualityAssessment:
+    """v0.2.0 decision: quiet-room gate, then an HNR ladder."""
+
+    def _verdict(quality: Quality, reason: str) -> QualityAssessment:
+        return QualityAssessment(
+            quality=quality,
+            primary_score=0.0,
+            secondary_score=0.0,
+            total_score=0.0,
+            reason=reason,
+        )
+
+    quiet_room = QUIET_ROOM_DB - threshold_offset_db
+    if background_db < quiet_room:
+        return _verdict("excellent", f"bgDB<{quiet_room:g}: quiet room")
+    if hnr >= HNR_EXCELLENT_DB:
+        return _verdict("excellent", f"hnr>={HNR_EXCELLENT_DB:g}: voice dominates noise")
+    if hnr >= HNR_GOOD_DB:
+        return _verdict(
+            "good", f"{HNR_GOOD_DB:g}<=hnr<{HNR_EXCELLENT_DB:g}: mild noise under voice"
+        )
+    if hnr >= HNR_FAIR_DB:
+        return _verdict("fair", f"{HNR_FAIR_DB:g}<=hnr<{HNR_GOOD_DB:g}: noise competes with voice")
+    return _verdict("poor", f"hnr<{HNR_FAIR_DB:g} in a non-quiet room: noise dominates")

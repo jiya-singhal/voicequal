@@ -239,3 +239,70 @@ class TestConcentrationGate:
             temporal_variance=8.0,
         )
         assert result.quality == "excellent"
+
+
+class TestHNRGatedPath:
+    """v0.2.0 decision path, selected whenever hnr is provided."""
+
+    def _run(self, background_db: float, hnr: float, **kw):
+        return assess_quality(
+            background_db=background_db,
+            spectral_flatness=0.3,
+            snr=40.0,
+            temporal_variance=5.0,
+            spectral_concentration=0.5,
+            hnr=hnr,
+            **kw,
+        )
+
+    def test_quiet_room_is_excellent_regardless_of_hnr(self):
+        result = self._run(background_db=45.0, hnr=-20.0)
+        assert result.quality == "excellent"
+        assert "quiet room" in result.reason
+
+    def test_high_hnr_is_excellent(self):
+        assert self._run(background_db=73.0, hnr=20.0).quality == "excellent"
+
+    def test_mid_hnr_is_good(self):
+        assert self._run(background_db=73.0, hnr=12.0).quality == "good"
+
+    def test_low_hnr_is_fair(self):
+        assert self._run(background_db=73.0, hnr=8.0).quality == "fair"
+
+    def test_very_low_hnr_in_loud_room_is_poor(self):
+        assert self._run(background_db=73.0, hnr=2.0).quality == "poor"
+
+    def test_thresholds_are_inclusive_at_boundaries(self):
+        from voicequal.assessment import HNR_EXCELLENT_DB, HNR_FAIR_DB, HNR_GOOD_DB
+
+        assert self._run(73.0, HNR_EXCELLENT_DB).quality == "excellent"
+        assert self._run(73.0, HNR_GOOD_DB).quality == "good"
+        assert self._run(73.0, HNR_FAIR_DB).quality == "fair"
+
+    def test_sensitive_offset_narrows_quiet_room_gate(self):
+        # bgDB 55 is a quiet room by default (<60) but not with a 10 dB offset (<50).
+        assert self._run(55.0, hnr=2.0).quality == "excellent"
+        assert self._run(55.0, hnr=2.0, threshold_offset_db=10.0).quality == "poor"
+
+    def test_spectral_snr_is_ignored_on_this_path(self):
+        # The motivating bug: a buried vowel with high spectral SNR must not
+        # ride to excellent when its HNR says noise dominates.
+        result = assess_quality(
+            background_db=74.0,
+            spectral_flatness=0.1,
+            snr=45.0,
+            temporal_variance=5.0,
+            spectral_concentration=0.5,
+            hnr=4.0,
+        )
+        assert result.quality == "poor"
+
+    def test_omitting_hnr_uses_legacy_path(self):
+        legacy = assess_quality(
+            background_db=74.0,
+            spectral_flatness=0.1,
+            snr=45.0,
+            temporal_variance=5.0,
+            spectral_concentration=0.5,
+        )
+        assert legacy.reason.startswith("35<snr<=50")

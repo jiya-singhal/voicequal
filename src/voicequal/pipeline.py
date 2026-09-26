@@ -16,6 +16,8 @@ from voicequal.assessment import (
 )
 from voicequal.io import load_audio
 from voicequal.metrics import (
+    clipping_ratio,
+    hnr,
     noise_floor,
     rms,
     snr,
@@ -42,6 +44,10 @@ class FileAssessment:
         snr: Aggregated signal-to-noise ratio in dB.
         spectral_flatness: Aggregated 0..1 flatness.
         spectral_concentration: Aggregated 0..1 top-N energy concentration.
+        hnr: Harmonic-to-noise ratio in dB, median over the louder half of
+            frames (tracks voice-vs-noise mixing SNR).
+        clipping_ratio: Fraction of samples at or above the clipping
+            threshold, averaged over frames.
         temporal_variance: The final temporal-variance reading.
         primary_score: Composite score primary component (0 if fast path).
         secondary_score: Composite score secondary component.
@@ -57,6 +63,8 @@ class FileAssessment:
     snr: float
     spectral_flatness: float
     spectral_concentration: float
+    hnr: float
+    clipping_ratio: float
     temporal_variance: float
     primary_score: float
     secondary_score: float
@@ -76,6 +84,21 @@ def _iter_frames(samples: np.ndarray, frame_size: int, hop_size: int):
         return
     for start in range(0, n - frame_size + 1, hop_size):
         yield samples[start : start + frame_size]
+
+
+def aggregate_hnr(hnr_values: list[float], rms_values: list[float]) -> float:
+    """Median HNR over the louder half of frames.
+
+    Frames at or above the median RMS are the ones most likely to carry
+    voice; quiet gaps and breaths would otherwise drag the estimate down.
+    Shared by the file pipeline and the live detector so both agree.
+    """
+    if not hnr_values:
+        return 0.0
+    rms_arr = np.asarray(rms_values, dtype=np.float64)
+    hnr_arr = np.asarray(hnr_values, dtype=np.float64)
+    loud = rms_arr >= np.median(rms_arr)
+    return float(np.median(hnr_arr[loud]))
 
 
 def assess(
@@ -112,6 +135,8 @@ def assess(
     snr_values: list[float] = []
     flatness_values: list[float] = []
     concentration_values: list[float] = []
+    hnr_values: list[float] = []
+    clipping_values: list[float] = []
     noise_floor_values: list[float] = []
     background_db_values: list[float] = []
     temporal_variance_values: list[float] = []
@@ -121,6 +146,8 @@ def assess(
         frame_snr = snr(frame)
         frame_flatness = spectral_flatness(frame)
         frame_concentration = spectral_concentration(frame)
+        frame_hnr = hnr(frame, sample_rate=sample_rate)
+        frame_clipping = clipping_ratio(frame)
         frame_noise_floor = noise_floor(frame)
 
         stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
@@ -132,6 +159,8 @@ def assess(
         snr_values.append(frame_snr)
         flatness_values.append(frame_flatness)
         concentration_values.append(frame_concentration)
+        hnr_values.append(frame_hnr)
+        clipping_values.append(frame_clipping)
         noise_floor_values.append(frame_noise_floor)
         background_db_values.append(frame_background_db)
         temporal_variance_values.append(frame_temporal_variance)
@@ -149,6 +178,9 @@ def assess(
     agg_snr = float(np.mean(snr_values[-tail:]))
     agg_flatness = float(np.mean(flatness_values[-tail:]))
     agg_concentration = float(np.mean(concentration_values[-tail:]))
+    # HNR uses the whole file: voice may not sit in the last N frames.
+    agg_hnr = aggregate_hnr(hnr_values, rms_values)
+    agg_clipping = float(np.mean(clipping_values))
     # Temporal variance is already a rolling statistic; use its last reading.
     agg_temporal_variance = float(temporal_variance_values[-1])
 
@@ -159,6 +191,7 @@ def assess(
         temporal_variance=agg_temporal_variance,
         spectral_concentration=agg_concentration,
         threshold_offset_db=threshold_offset_db,
+        hnr=agg_hnr,
     )
 
     return FileAssessment(
@@ -168,6 +201,8 @@ def assess(
         snr=agg_snr,
         spectral_flatness=agg_flatness,
         spectral_concentration=agg_concentration,
+        hnr=agg_hnr,
+        clipping_ratio=agg_clipping,
         temporal_variance=agg_temporal_variance,
         primary_score=quality.primary_score,
         secondary_score=quality.secondary_score,

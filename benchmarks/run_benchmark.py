@@ -42,6 +42,8 @@ class ClipResult:
     snr_measured: float
     spectral_flatness: float
     spectral_concentration: float
+    hnr: float
+    clipping_ratio: float
     temporal_variance: float
     reason: str
 
@@ -63,6 +65,9 @@ class BenchmarkReport:
     spearman_correlation: float
     per_category: dict = field(default_factory=dict)
     confusion_matrix: dict = field(default_factory=dict)
+    # How well each dB-valued estimator tracks the manifest's mixing SNR on
+    # the mixed clips (those with a known snr_db). Keys: estimator name.
+    snr_estimators: dict = field(default_factory=dict)
 
 
 def load_manifest(path: Path) -> list[dict]:
@@ -91,6 +96,8 @@ def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
                 snr_measured=r.snr,
                 spectral_flatness=r.spectral_flatness,
                 spectral_concentration=r.spectral_concentration,
+                hnr=r.hnr,
+                clipping_ratio=r.clipping_ratio,
                 temporal_variance=r.temporal_variance,
                 reason=r.reason,
             )
@@ -122,6 +129,24 @@ def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
     for r in results:
         confusion[r.expected_tier][r.predicted_tier] += 1
 
+    # SNR estimator error on clips with a known mixing SNR.
+    mixed = [r for r in results if r.snr_db is not None]
+    snr_estimators: dict = {}
+    if len(mixed) >= 3:
+        truth = [r.snr_db for r in mixed]
+        for name, values in (
+            ("hnr", [r.hnr for r in mixed]),
+            ("spectral_snr", [r.snr_measured for r in mixed]),
+        ):
+            errors = [v - t for v, t in zip(values, truth, strict=True)]
+            est_rho, _ = spearmanr(values, truth)
+            snr_estimators[name] = {
+                "count": len(mixed),
+                "mae_db": sum(abs(e) for e in errors) / len(errors),
+                "bias_db": sum(errors) / len(errors),
+                "spearman_vs_mixing_snr": float(est_rho),
+            }
+
     report = BenchmarkReport(
         voicequal_version=__version__,
         total_clips=len(results),
@@ -130,6 +155,7 @@ def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
         spearman_correlation=float(rho),
         per_category=per_category,
         confusion_matrix=confusion,
+        snr_estimators=snr_estimators,
     )
     return report, results
 
@@ -151,6 +177,15 @@ def print_report(report: BenchmarkReport) -> None:
             f"  {cat:<23s} {m['count']:>6d} "
             f"{m['exact_accuracy']:>7.1%} {m['off_by_one_accuracy']:>10.1%}"
         )
+
+    if report.snr_estimators:
+        print("\nSNR estimators vs manifest mixing SNR (mixed clips only):")
+        print(f"{'estimator':<16s} {'n':>4s} {'MAE dB':>8s} {'bias dB':>8s} {'spearman':>9s}")
+        for name, m in report.snr_estimators.items():
+            print(
+                f"  {name:<14s} {m['count']:>4d} {m['mae_db']:>8.2f} "
+                f"{m['bias_db']:>+8.2f} {m['spearman_vs_mixing_snr']:>+9.3f}"
+            )
 
     print("\nConfusion matrix (rows = expected, cols = predicted):")
     header = "  " + " " * 12 + " ".join(f"{p:>10s}" for p in TIER_ORDER)

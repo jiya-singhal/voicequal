@@ -25,9 +25,11 @@ Frozen dataclass returned by `assess`.
 | `quality` | `str` | `excellent`, `good`, `fair`, or `poor`. |
 | `reason` | `str` | Which branch of the tier logic fired, in words. |
 | `background_db` | `float` | Aggregated dBA-like room loudness. |
-| `snr` | `float` | Aggregated spectral SNR in dB. |
+| `hnr` | `float` | Harmonic-to-noise ratio in dB, median over the louder half of frames. Drives the tier. |
+| `snr` | `float` | Aggregated spectral SNR in dB (informational since v0.2.0). |
 | `spectral_flatness` | `float` | 0..1, higher is more noise-like. |
 | `spectral_concentration` | `float` | 0..1, share of energy in the top-3 FFT bins. |
+| `clipping_ratio` | `float` | Fraction of samples at or above full scale. |
 | `temporal_variance` | `float` | Final temporal-variance reading. |
 | `primary_score` | `float` | Composite score primary component (0 if a fast-path fired). |
 | `secondary_score` | `float` | Composite score secondary component. |
@@ -61,8 +63,8 @@ Methods:
 Frozen dataclass describing the current rolling window. Fields mirror
 `FileAssessment` minus the file-level ones:
 
-`quality`, `reason`, `background_db`, `snr`, `spectral_flatness`,
-`spectral_concentration`, `temporal_variance`, `frames_analyzed`.
+`quality`, `reason`, `hnr`, `background_db`, `snr`, `spectral_flatness`,
+`spectral_concentration`, `clipping_ratio`, `temporal_variance`, `frames_analyzed`.
 
 ## Calibration
 
@@ -84,8 +86,9 @@ these functions exist for apps that run their own calibration flow.
 
 Also exported, for people who want the pieces:
 
-- `voicequal.metrics`: `rms`, `snr`, `noise_floor`, `spectral_flatness`,
-  `spectral_concentration`. Pure per-frame functions.
+- `voicequal.metrics`: `rms`, `hnr`, `harmonic_ratio`, `clipping_ratio`,
+  `snr`, `noise_floor`, `spectral_flatness`, `spectral_concentration`.
+  Pure per-frame functions.
 - `voicequal.state.RollingStats`: rolling noise-floor and RMS history.
 - `voicequal.assessment.assess_quality`: the tier decision, returning a
   `QualityAssessment`.

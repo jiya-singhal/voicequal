@@ -15,13 +15,26 @@ from dataclasses import dataclass
 import numpy as np
 
 from voicequal.assessment import assess_quality
-from voicequal.metrics import noise_floor, rms, snr, spectral_concentration, spectral_flatness
-from voicequal.pipeline import FRAME_SIZE, HOP_SIZE, STEADY_STATE_TAIL
+from voicequal.metrics import (
+    clipping_ratio,
+    hnr,
+    noise_floor,
+    rms,
+    snr,
+    spectral_concentration,
+    spectral_flatness,
+)
+from voicequal.pipeline import FRAME_SIZE, HOP_SIZE, STEADY_STATE_TAIL, aggregate_hnr
 from voicequal.state import RollingStats
 
 # Number of consecutive frames a new tier must appear in before it
 # replaces the current stable tier. Prevents single-frame flicker.
 DEFAULT_STABILITY_FRAMES: int = 3
+
+# HNR is aggregated over a longer window than the other metrics (~3s at
+# 10Hz) because it is a median over the louder half of frames and needs
+# enough voiced frames to be stable.
+HNR_WINDOW_FRAMES: int = RollingStats.RMS_HISTORY_SIZE
 
 
 @dataclass(frozen=True)
@@ -38,6 +51,8 @@ class LiveAssessment:
     snr: float
     spectral_flatness: float
     spectral_concentration: float
+    hnr: float
+    clipping_ratio: float
     temporal_variance: float
     frames_analyzed: int
 
@@ -82,6 +97,9 @@ class LiveDetector:
         self._flatness_history: list[float] = []
         self._concentration_history: list[float] = []
         self._background_db_history: list[float] = []
+        self._hnr_history: list[float] = []
+        self._rms_history: list[float] = []
+        self._clipping_history: list[float] = []
         self._last_temporal_variance: float = 0.0
 
         # Hysteresis state.
@@ -126,6 +144,8 @@ class LiveDetector:
         frame_snr = snr(frame)
         frame_flatness = spectral_flatness(frame)
         frame_concentration = spectral_concentration(frame)
+        frame_hnr = hnr(frame, sample_rate=self.sample_rate)
+        frame_clipping = clipping_ratio(frame)
         frame_noise_floor = noise_floor(frame)
 
         self._stats.update(current_noise_floor=frame_noise_floor, current_rms=frame_rms)
@@ -140,6 +160,9 @@ class LiveDetector:
         self._flatness_history.append(frame_flatness)
         self._concentration_history.append(frame_concentration)
         self._background_db_history.append(frame_background_db)
+        self._hnr_history.append(frame_hnr)
+        self._rms_history.append(frame_rms)
+        self._clipping_history.append(frame_clipping)
         self._last_temporal_variance = frame_temporal_variance
 
         # Cap history at STEADY_STATE_TAIL (avoid unbounded growth).
@@ -148,6 +171,10 @@ class LiveDetector:
             self._flatness_history = self._flatness_history[-STEADY_STATE_TAIL:]
             self._concentration_history = self._concentration_history[-STEADY_STATE_TAIL:]
             self._background_db_history = self._background_db_history[-STEADY_STATE_TAIL:]
+        if len(self._hnr_history) > HNR_WINDOW_FRAMES:
+            self._hnr_history = self._hnr_history[-HNR_WINDOW_FRAMES:]
+            self._rms_history = self._rms_history[-HNR_WINDOW_FRAMES:]
+            self._clipping_history = self._clipping_history[-HNR_WINDOW_FRAMES:]
 
         self._frames_analyzed += 1
 
@@ -161,6 +188,8 @@ class LiveDetector:
         agg_flatness = float(np.mean(self._flatness_history))
         agg_concentration = float(np.mean(self._concentration_history))
         agg_background_db = float(np.mean(self._background_db_history))
+        agg_hnr = aggregate_hnr(self._hnr_history, self._rms_history)
+        agg_clipping = float(np.mean(self._clipping_history))
         agg_temporal_variance = self._last_temporal_variance
 
         verdict = assess_quality(
@@ -170,6 +199,7 @@ class LiveDetector:
             temporal_variance=agg_temporal_variance,
             spectral_concentration=agg_concentration,
             threshold_offset_db=self.threshold_offset_db,
+            hnr=agg_hnr,
         )
 
         self._latest_assessment = LiveAssessment(
@@ -179,6 +209,8 @@ class LiveDetector:
             snr=agg_snr,
             spectral_flatness=agg_flatness,
             spectral_concentration=agg_concentration,
+            hnr=agg_hnr,
+            clipping_ratio=agg_clipping,
             temporal_variance=agg_temporal_variance,
             frames_analyzed=self._frames_analyzed,
         )
@@ -225,6 +257,9 @@ class LiveDetector:
         self._flatness_history.clear()
         self._concentration_history.clear()
         self._background_db_history.clear()
+        self._hnr_history.clear()
+        self._rms_history.clear()
+        self._clipping_history.clear()
         self._last_temporal_variance = 0.0
         self._current_tier = None
         self._candidate_tier = None

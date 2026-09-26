@@ -25,7 +25,7 @@ a periodic heartbeat with the current readings.
 
 ```text
 $ voicequal listen
-[15:26:37]  EXCELLENT   room= 45.5 dBA   SNR=18.4dB
+[15:26:37]  EXCELLENT   room= 45.5 dBA   HNR=18.4dB
 [15:26:53]  CHANGE  GOOD   room= 55.0 dBA
 [15:26:59]  CHANGE  FAIR   room= 60.4 dBA
 ```

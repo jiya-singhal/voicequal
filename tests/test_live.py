@@ -123,3 +123,20 @@ class TestSnapshotShape:
         assert snap is not None
         with pytest.raises(dataclasses.FrozenInstanceError):
             snap.quality = "poor"  # type: ignore[misc]
+
+
+class TestHNRInLive:
+    def test_snapshot_carries_hnr_and_clipping(self):
+        det = LiveDetector()
+        det.push(_sine(440.0, duration_s=3.0))
+        snap = det.get_current()
+        assert snap is not None
+        assert snap.hnr > 25.0
+        assert snap.clipping_ratio == 0.0
+
+    def test_reset_clears_hnr_history(self):
+        det = LiveDetector()
+        det.push(_sine(440.0, duration_s=3.0))
+        det.reset()
+        assert det._hnr_history == []
+        assert det._rms_history == []

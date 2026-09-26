@@ -116,3 +116,46 @@ class TestFileAssessmentShape:
                 assert np.isfinite(field), f"non-finite value: {field}"
         finally:
             os.unlink(path)
+
+
+class TestHNRFields:
+    def test_pure_sine_has_high_hnr_and_no_clipping(self):
+        sample_rate = 16000
+        t = np.linspace(0, 2, 2 * sample_rate, endpoint=False)
+        samples = (0.5 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        path = _write_wav(samples, sample_rate)
+        try:
+            result = assess(path)
+            assert result.hnr > 25.0
+            assert result.clipping_ratio == 0.0
+            assert result.quality == "excellent"
+        finally:
+            os.unlink(path)
+
+    def test_tone_buried_in_loud_noise_is_poor(self):
+        # 5 dB mixing SNR, loud enough not to be a quiet room. v0.1.1 called
+        # this kind of clip excellent because the spectral peak still wins.
+        sample_rate = 16000
+        rng = np.random.default_rng(0)
+        t = np.linspace(0, 3, 3 * sample_rate, endpoint=False)
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t)
+        noise = rng.standard_normal(t.size)
+        noise *= (np.sqrt(np.mean(tone**2)) / 10 ** (5 / 20)) / np.sqrt(np.mean(noise**2))
+        samples = (tone + noise).astype(np.float32)
+        path = _write_wav(samples, sample_rate)
+        try:
+            result = assess(path)
+            assert result.hnr < 8.0
+            assert result.quality == "poor"
+        finally:
+            os.unlink(path)
+
+    def test_clipped_audio_reports_clipping(self):
+        sample_rate = 16000
+        t = np.linspace(0, 2, 2 * sample_rate, endpoint=False)
+        samples = np.clip(2.0 * np.sin(2 * np.pi * 220 * t), -1.0, 1.0).astype(np.float32)
+        path = _write_wav(samples, sample_rate)
+        try:
+            assert assess(path).clipping_ratio > 0.3
+        finally:
+            os.unlink(path)

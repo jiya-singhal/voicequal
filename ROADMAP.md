@@ -1,6 +1,6 @@
 # voicequal roadmap
 
-_Last updated: 2026-09-25. Current release: v0.1.1._
+_Last updated: 2026-09-25. Current release: v0.2.0 (unreleased on PyPI)._
 
 voicequal answers one question: **is this recording clean enough to
 process?** Today it does that with a rule-based, dependency-free DSP
@@ -62,18 +62,31 @@ A sung vowel keeps a dominant harmonic peak even when buried in noise,
 so its spectral SNR reads high. The v0.2.0 step 2 experiment showed a
 concentration-based VAD cannot fix this. See `handoff.md` history.
 
-- [ ] Add **WADA-SNR** (Kim & Stern, 2008) as a blind mixing-SNR estimator. Informational field first.
-- [ ] Add **harmonic-to-noise ratio (HNR)** via autocorrelation as the pure-numpy voiced/unvoiced signal.
-- [ ] Add **Silero VAD** as an optional extra (`voicequal[vad]`) for the accurate path.
-- [ ] Add a **clipping detector** (sample saturation ratio).
+- [x] ~~Add **WADA-SNR**~~ Tried. Assumes Gamma-distributed speech amplitudes; sung vowels do not fit (MAE 13.5 dB). Rejected, see CHANGELOG.
+- [x] Add **harmonic-to-noise ratio (HNR)** via autocorrelation. MAE 4.35 dB against mixing SNR. This is the signal.
+- [ ] Add **Silero VAD** as an optional extra (`voicequal[vad]`). Deferred: HNR's louder-half aggregation was enough for this fix; revisit with real speech in Phase 2.
+- [x] Add a **clipping detector** (sample saturation ratio).
 - [ ] Add a **reverberation proxy** (C50 or decay-rate estimate).
-- [ ] Extend the benchmark to report **SNR error in dB** (MAE), not only tier hits.
-- [ ] Prove tier separation on the benchmark for each new field **before** wiring it into `assessment.py`.
-- [ ] Rewire the tier decision on the winning signal. Mirror into `live.py`.
-- [ ] Re-verify live mic on real audio. Update README numbers.
+- [x] Extend the benchmark to report **SNR error in dB** (MAE), not only tier hits.
+- [x] Prove tier separation on the benchmark for each new field **before** wiring it into `assessment.py`.
+- [x] Rewire the tier decision on the winning signal. Mirror into `live.py`.
+- [ ] Re-verify live mic on real audio (needs a human at a mic).
+- [x] Update README numbers.
 
 **Done when:** `very_loud_snr` >= 50% exact, no regression elsewhere,
 README benchmark table updated with the real numbers.
+
+**Outcome (2026-09-25):** exact 46.0% -> 55.5%, off-by-one 82.0% -> 89.5%,
+`very_loud_snr` 5.0% -> 32.5%, `quiet_noise` 100%. The 50% target for
+`very_loud_snr` is reachable (68% at a 10 dB fair/poor threshold) but
+only by trading off-by-one accuracy down to 82%; the shipped thresholds
+favour fewer gross errors. A cross-validated random forest on all
+features reaches 61.5% exact / 93.5% off-by-one on this set, so the hand
+rule is within about six points of what these features allow. The
+remaining gap is the 10 dB vs 5 dB boundary, which HNR compresses, and
+clean vocals vs 20 dB mixes, which VocalSet's own breathy and lip-trill
+techniques blur. Phase 2's public datasets are the right place to push
+further.
 
 ---
 

@@ -3,7 +3,17 @@
 import numpy as np
 import pytest
 
-from voicequal.metrics import noise_floor, rms, snr, spectral_concentration, spectral_flatness
+from voicequal.metrics import (
+    HNR_FLOOR_DB,
+    clipping_ratio,
+    harmonic_ratio,
+    hnr,
+    noise_floor,
+    rms,
+    snr,
+    spectral_concentration,
+    spectral_flatness,
+)
 
 
 class TestRMS:
@@ -133,3 +143,90 @@ class TestSpectralConcentration:
             frame = rng.standard_normal(1024).astype(np.float32)
             c = spectral_concentration(frame)
             assert 0.0 <= c <= 1.0
+
+
+def _sine(freq: float, n: int = 2048, sr: int = 16000, amp: float = 0.5) -> np.ndarray:
+    t = np.arange(n) / sr
+    return (amp * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+
+def _mix_at_snr(signal: np.ndarray, noise: np.ndarray, snr_db: float) -> np.ndarray:
+    sig_rms = np.sqrt(np.mean(signal**2))
+    noise_rms = np.sqrt(np.mean(noise**2))
+    gain = (sig_rms / (10 ** (snr_db / 20))) / noise_rms
+    return (signal + gain * noise).astype(np.float32)
+
+
+class TestHarmonicRatio:
+    def test_silence_returns_zero(self):
+        assert harmonic_ratio(np.zeros(2048, dtype=np.float32)) == 0.0
+
+    def test_empty_returns_zero(self):
+        assert harmonic_ratio(np.array([], dtype=np.float32)) == 0.0
+
+    def test_pure_sine_is_near_one(self):
+        assert harmonic_ratio(_sine(220.0)) > 0.95
+
+    def test_white_noise_is_low(self):
+        rng = np.random.default_rng(0)
+        noise = rng.standard_normal(2048).astype(np.float32)
+        assert harmonic_ratio(noise) < 0.3
+
+    def test_bounded_below_one(self):
+        assert harmonic_ratio(_sine(440.0)) < 1.0
+
+
+class TestHNR:
+    def test_silence_returns_floor(self):
+        assert hnr(np.zeros(2048, dtype=np.float32)) == HNR_FLOOR_DB
+
+    def test_pure_sine_is_high(self):
+        assert hnr(_sine(220.0)) > 25.0
+
+    def test_white_noise_is_below_zero(self):
+        rng = np.random.default_rng(1)
+        noise = rng.standard_normal(2048).astype(np.float32)
+        assert hnr(noise) < 0.0
+
+    @pytest.mark.parametrize("target_snr", [20.0, 10.0, 5.0])
+    def test_tracks_mixing_snr_of_tone_plus_noise(self, target_snr):
+        # For a periodic signal plus white noise, HNR should approximate
+        # the mixing SNR to within a few dB (r_max ~= Ps / (Ps + Pn)).
+        rng = np.random.default_rng(2)
+        noise = rng.standard_normal(2048).astype(np.float32)
+        mixed = _mix_at_snr(_sine(200.0), noise, target_snr)
+        assert hnr(mixed) == pytest.approx(target_snr, abs=3.0)
+
+    def test_monotonic_in_snr(self):
+        rng = np.random.default_rng(3)
+        noise = rng.standard_normal(2048).astype(np.float32)
+        tone = _sine(200.0)
+        values = [hnr(_mix_at_snr(tone, noise, s)) for s in (30.0, 20.0, 10.0, 0.0)]
+        assert values == sorted(values, reverse=True)
+
+    def test_unlike_spectral_snr_it_drops_when_tone_is_buried(self):
+        # The motivating case: spectral snr() stays high for a tone in
+        # heavy noise because the peak bin still dominates; hnr() drops.
+        rng = np.random.default_rng(4)
+        noise = rng.standard_normal(2048).astype(np.float32)
+        clean = _sine(200.0)
+        buried = _mix_at_snr(clean, noise, 5.0)
+        assert hnr(clean) - hnr(buried) > 15.0
+        assert snr(buried) > 20.0  # spectral SNR still reads "clean-ish"
+
+
+class TestClippingRatio:
+    def test_empty_is_zero(self):
+        assert clipping_ratio(np.array([], dtype=np.float32)) == 0.0
+
+    def test_clean_signal_is_zero(self):
+        assert clipping_ratio(_sine(440.0, amp=0.5)) == 0.0
+
+    def test_hard_clipped_square_wave_is_one(self):
+        frame = np.sign(_sine(440.0)).astype(np.float32)
+        assert clipping_ratio(frame) == pytest.approx(1.0, abs=1e-3)
+
+    def test_partial_clipping_counts_fraction(self):
+        frame = np.clip(_sine(440.0, amp=2.0), -1.0, 1.0)
+        ratio = clipping_ratio(frame)
+        assert 0.3 < ratio < 0.8

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "voicequal"
-version = "0.1.1"
+version = "0.2.0"
 description = "Real-time audio quality assessment for voice apps"
 authors = ["Jiya Singhal <jiya.23bcs10043@sst.scaler.com>"]
 license = "MIT"
