@@ -40,6 +40,37 @@ Frozen dataclass returned by `assess`.
 | `sample_rate` | `int` | Rate the audio was analyzed at. |
 | `num_frames` | `int` | Number of frames the audio was cut into. |
 
+### `segments`
+
+`FileAssessment.segments` is a tuple of `Segment` values, one per second
+of audio (non-overlapping 1 s windows; a trailing window with fewer than
+two frames merges into the previous one; a clip under 1 s gives one
+segment). Segments explain the whole-file tier, they do not feed it.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `start_s`, `end_s` | `float` | Window bounds in seconds. |
+| `snr_estimate` | `float` | max(`hnr`, `energy_snr`) for this window, dB. |
+| `hnr` | `float` | Median HNR over the louder half of the window's frames. |
+| `energy_snr` | `float` | Energy SNR from the window's 25 ms block levels. |
+| `background_db` | `float` | Mean frame background level in the window. |
+| `quality` | `str` | Tier for the window alone, same gate and ladder as the file. |
+
+## `worst_segments(result, n=3)`
+
+Returns the `n` segments with the lowest `snr_estimate`, ascending.
+Segments in a quiet room (`background_db` below 60 dBA) are excluded,
+since the quiet-room gate makes them excellent regardless.
+
+```python
+from voicequal import assess
+from voicequal.pipeline import worst_segments
+
+result = assess("take.wav")
+for seg in worst_segments(result):
+    print(f"{seg.start_s:.0f}-{seg.end_s:.0f}s  {seg.snr_estimate:.1f} dB  {seg.quality}")
+```
+
 ## `LiveDetector(sample_rate=16000, stability_frames=3, threshold_offset_db=0.0, db_offset=94.0)`
 
 Streaming detector.
@@ -100,3 +131,15 @@ Also exported, for people who want the pieces:
 - `voicequal.assessment.assess_quality`: the tier decision, returning a
   `QualityAssessment`.
 - `voicequal.io.load_audio`: load and resample a file.
+
+
+## `voicequal.models.predict_mos(samples, sample_rate=16000)`
+
+Returns a `MOSEstimate` with `sig`, `bak`, `ovrl` (1..5) from the
+distilled quality model. `QualityModel(weights_path=None)` is the
+reusable class. See [Distilled quality model](model.md).
+
+## `voicequal.advise(result)`
+
+Returns an `Advice` with `headline`, `actions` (0..3 strings) and
+`severity` (`ok` | `warn` | `bad`). See [Advice](advice.md).

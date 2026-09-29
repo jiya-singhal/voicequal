@@ -1,4 +1,5 @@
 from voicequal import calibration
+from voicequal.advice import Advice, advise
 from voicequal.assessment import QualityAssessment, assess_quality
 from voicequal.io import load_audio
 from voicequal.live import LiveAssessment, LiveDetector
@@ -35,12 +36,14 @@ def _read_version() -> str:
 __version__ = _read_version()
 
 __all__ = [
+    "Advice",
     "FileAssessment",
     "LiveAssessment",
     "LiveDetector",
     "QualityAssessment",
     "RollingStats",
     "__version__",
+    "advise",
     "assess",
     "assess_quality",
     "assess_samples",

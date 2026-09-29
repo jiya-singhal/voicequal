@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from voicequal.assessment import (
+    QUIET_ROOM_DB,
     QualityAssessment,
     assess_quality,
 )
@@ -33,6 +34,32 @@ from voicequal.state import RollingStats
 FRAME_SIZE: int = 2048
 HOP_SIZE: int = 1600
 STEADY_STATE_TAIL: int = 10  # Use last N frames for aggregation.
+SEGMENT_SECONDS: float = 1.0  # Explainability window.
+MIN_SEGMENT_FRAMES: int = 2  # Shorter tail segments merge into the previous one.
+
+
+@dataclass(frozen=True)
+class Segment:
+    """Quality of one time window of a file, for explainability.
+
+    Fields:
+        start_s: Segment start, seconds from the beginning of the file.
+        end_s: Segment end, seconds.
+        snr_estimate: max(hnr, energy_snr) over this window, dB.
+        hnr: Median HNR over the louder half of this window's frames, dB.
+        energy_snr: Energy SNR from this window's 25 ms block levels, dB.
+        background_db: Mean frame background level in this window, dBA-like.
+        quality: Tier for this window alone, from the same quiet-room gate
+            and snr_estimate ladder as the whole-file decision.
+    """
+
+    start_s: float
+    end_s: float
+    snr_estimate: float
+    hnr: float
+    energy_snr: float
+    background_db: float
+    quality: str
 
 
 @dataclass(frozen=True)
@@ -60,6 +87,8 @@ class FileAssessment:
         duration_seconds: Length of the analyzed audio.
         sample_rate: Sample rate the audio was analyzed at.
         num_frames: Number of frames the audio was chopped into.
+        segments: Per-second breakdown (see Segment). Does not feed the
+            whole-file tier; it explains it.
     """
 
     quality: str
@@ -79,6 +108,7 @@ class FileAssessment:
     duration_seconds: float
     sample_rate: int
     num_frames: int
+    segments: tuple[Segment, ...]
 
 
 def _iter_frames(samples: np.ndarray, frame_size: int, hop_size: int):
@@ -116,6 +146,88 @@ def combine_snr_estimates(hnr_db: float, energy_snr_db: float) -> float:
     Each fails low, so the max picks the estimator whose assumption held.
     """
     return float(max(hnr_db, energy_snr_db))
+
+
+def _segment_frames(
+    num_frames: int, samples_count: int, sample_rate: int
+) -> list[tuple[float, float, list[int]]]:
+    """Group frame indices into consecutive SEGMENT_SECONDS windows.
+
+    A frame belongs to the window containing its centre. Windows with
+    fewer than MIN_SEGMENT_FRAMES frames are merged into the previous
+    window. A file shorter than one window yields one window covering it.
+    Returns (start_s, end_s, frame_indices) per window.
+    """
+    duration = samples_count / sample_rate
+    if num_frames == 0:
+        return []
+    if duration <= SEGMENT_SECONDS:
+        return [(0.0, duration, list(range(num_frames)))]
+
+    centres = [(i * HOP_SIZE + FRAME_SIZE / 2) / sample_rate for i in range(num_frames)]
+    n_windows = int(np.ceil(duration / SEGMENT_SECONDS))
+    buckets: list[list[int]] = [[] for _ in range(n_windows)]
+    for i, c in enumerate(centres):
+        buckets[min(int(c // SEGMENT_SECONDS), n_windows - 1)].append(i)
+
+    windows: list[tuple[float, float, list[int]]] = []
+    for w, idxs in enumerate(buckets):
+        start = w * SEGMENT_SECONDS
+        end = min((w + 1) * SEGMENT_SECONDS, duration)
+        if windows and (len(idxs) < MIN_SEGMENT_FRAMES or not idxs):
+            ps, _pe, pidx = windows[-1]
+            windows[-1] = (ps, end, pidx + idxs)
+        elif idxs:
+            windows.append((start, end, idxs))
+        # else: an empty leading bucket, nothing to record.
+    return windows
+
+
+def _build_segments(
+    samples: np.ndarray,
+    sample_rate: int,
+    hnr_values: list[float],
+    rms_values: list[float],
+    background_db_values: list[float],
+    threshold_offset_db: float,
+) -> tuple[Segment, ...]:
+    segments: list[Segment] = []
+    for start_s, end_s, idxs in _segment_frames(len(hnr_values), samples.size, sample_rate):
+        seg_hnr = aggregate_hnr([hnr_values[i] for i in idxs], [rms_values[i] for i in idxs])
+        seg_samples = samples[int(start_s * sample_rate) : int(end_s * sample_rate)]
+        seg_energy = energy_snr(block_rms(seg_samples))
+        seg_est = combine_snr_estimates(seg_hnr, seg_energy)
+        seg_bg = float(np.mean([background_db_values[i] for i in idxs]))
+        verdict = assess_quality(
+            background_db=seg_bg,
+            spectral_flatness=0.0,
+            snr=0.0,
+            temporal_variance=0.0,
+            threshold_offset_db=threshold_offset_db,
+            snr_estimate=seg_est,
+        )
+        segments.append(
+            Segment(
+                start_s=float(start_s),
+                end_s=float(end_s),
+                snr_estimate=seg_est,
+                hnr=seg_hnr,
+                energy_snr=seg_energy,
+                background_db=seg_bg,
+                quality=verdict.quality,
+            )
+        )
+    return tuple(segments)
+
+
+def worst_segments(result: FileAssessment, n: int = 3) -> list[Segment]:
+    """The ``n`` segments with the lowest snr_estimate, ascending.
+
+    Segments recorded in a quiet room (background below QUIET_ROOM_DB) are
+    excluded: they are excellent by the gate regardless of their SNR.
+    """
+    candidates = [seg for seg in result.segments if seg.background_db >= QUIET_ROOM_DB]
+    return sorted(candidates, key=lambda seg: seg.snr_estimate)[:n]
 
 
 def assess(
@@ -235,6 +347,15 @@ def assess_samples(
         snr_estimate=agg_snr_estimate,
     )
 
+    segments = _build_segments(
+        samples,
+        sample_rate,
+        hnr_values,
+        rms_values,
+        background_db_values,
+        threshold_offset_db,
+    )
+
     return FileAssessment(
         quality=quality.quality,
         reason=quality.reason,
@@ -253,4 +374,5 @@ def assess_samples(
         duration_seconds=duration_seconds,
         sample_rate=sample_rate,
         num_frames=num_frames,
+        segments=segments,
     )

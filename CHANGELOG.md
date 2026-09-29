@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-30
+
+The AI layer, built on the fixed feature pipeline from 0.3.0.
+
+### Added
+- **Distilled P.835 quality model** (`voicequal.models.predict_mos`,
+  `QualityModel`): predicts DNSMOS-style SIG / BAK / OVRL from 169 clip
+  features (9 DSP aggregates + log-mel statistics) with a ~13k-parameter
+  MLP that ships in the wheel as numpy weights (`quality_mlp.npz`) and
+  runs in pure numpy. Trained on VoiceBank-DEMAND train shard 0 with
+  DNSMOS as teacher, evaluated on the unseen-speaker test split:
+  BAK Pearson 0.93 / OVRL 0.87 / SIG 0.65 against DNSMOS on unseen speakers, MAE ~0.19 MOS, 51 KB, ~70 us per clip after features. Same network exported to ONNX for browsers.
+- `voicequal.features.clip_features()` and a numpy log-mel spectrogram.
+- **Per-segment explainability**: `FileAssessment.segments` gives a 1 s
+  breakdown (snr_estimate, hnr, energy_snr, background_db, tier) and
+  `worst_segments()` returns the seconds that hurt most. The CLI prints a
+  timeline with a bar per second and a "Weakest:" line (`--no-timeline`
+  to hide).
+- **Advice layer** (`voicequal.advise`): deterministic, dependency-free
+  rules that turn the metrics into one headline and up to three actions
+  ("Recording is clipping", "Loud room is drowning the voice", ...).
+  Optional `voicequal[llm]` adds `advise_with_llm()`, which asks Claude to
+  rephrase and prioritise but never to invent causes.
+- **MCP server** (`voicequal[mcp]`, `voicequal-mcp`): exposes
+  `assess_file` and `assess_base64_wav` tools returning the full result
+  plus advice, for Claude Desktop, Claude Code, or any MCP client.
+- Training and labelling scripts under `benchmarks/distill/`.
+
+### Changed
+- Whole-file tier and all benchmark numbers are unchanged from 0.3.0.
+
 ## [0.3.0] - 2026-09-30
 
 Speech support and the first comparison against a neural reference.
@@ -125,7 +156,8 @@ The mixing-SNR fix. See the README benchmark section for the full numbers.
 - Four metrics: SNR, spectral flatness, temporal variance, and
   background dBA.
 
-[Unreleased]: https://github.com/jiya-singhal/voicequal/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jiya-singhal/voicequal/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jiya-singhal/voicequal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jiya-singhal/voicequal/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiya-singhal/voicequal/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jiya-singhal/voicequal/compare/v0.1.0...v0.1.1

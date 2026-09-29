@@ -21,7 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from voicequal import __version__
-from voicequal.pipeline import assess
+from voicequal.pipeline import FileAssessment, assess, worst_segments
 
 if TYPE_CHECKING:
     from voicequal import calibration
@@ -42,7 +42,42 @@ def _quality_text(quality: str) -> Text:
     return Text(quality.upper(), style=f"bold {color}")
 
 
-def _cmd_assess(path: str) -> int:
+BAR_WIDTH = 6
+BAR_MAX_DB = 30.0
+
+
+def _snr_bar(value_db: float) -> str:
+    filled = int(round(max(0.0, min(value_db, BAR_MAX_DB)) / BAR_MAX_DB * BAR_WIDTH))
+    return "█" * filled + "░" * (BAR_WIDTH - filled)
+
+
+def _fmt_range(start_s: float, end_s: float) -> str:
+    return f"{start_s:.0f}-{end_s:.0f}s"
+
+
+def _print_timeline(result: FileAssessment) -> None:
+    if not result.segments:
+        return
+    console.print("[dim]Timeline (1 s segments, SNR estimate):[/]")
+    for seg in result.segments:
+        line = Text("  ")
+        line.append(f"{_fmt_range(seg.start_s, seg.end_s):>7}  ")
+        line.append(_snr_bar(seg.snr_estimate), style="cyan")
+        line.append(f"  {seg.snr_estimate:5.1f} dB  ")
+        line.append(seg.quality, style=f"bold {QUALITY_COLOR.get(seg.quality, 'white')}")
+        console.print(line)
+    weakest = worst_segments(result, n=3)
+    if weakest:
+        parts = ", ".join(
+            f"{_fmt_range(s.start_s, s.end_s)} ({s.snr_estimate:.1f} dB, {s.quality})"
+            for s in weakest
+        )
+        console.print(f"[bold]Weakest:[/] {parts}")
+    else:
+        console.print("[bold]Weakest:[/] none (quiet room throughout)")
+
+
+def _cmd_assess(path: str, timeline: bool = True) -> int:
     if not os.path.isfile(path):
         console.print(f"[bold red]Error:[/] file not found: {path}")
         return 1
@@ -76,6 +111,8 @@ def _cmd_assess(path: str) -> int:
     table.add_row("Frames analyzed", str(result.num_frames))
 
     console.print(Panel(table, title=f"voicequal · {path}", border_style="cyan"))
+    if timeline:
+        _print_timeline(result)
     return 0
 
 
@@ -278,6 +315,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_assess = subs.add_parser("assess", help="Assess a single audio file.")
     p_assess.add_argument("path", help="Path to a WAV/FLAC/OGG file.")
+    p_assess.add_argument(
+        "--no-timeline",
+        action="store_true",
+        help="Skip the per-second timeline and weakest-segments summary.",
+    )
 
     p_listen = subs.add_parser(
         "listen",
@@ -319,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "assess":
-        return _cmd_assess(args.path)
+        return _cmd_assess(args.path, timeline=not args.no_timeline)
     if args.command == "listen":
         return _cmd_listen(
             stability_frames=args.stability_frames,

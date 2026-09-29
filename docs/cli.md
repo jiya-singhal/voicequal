@@ -2,7 +2,7 @@
 
 ```text
 voicequal --version
-voicequal assess <path>
+voicequal assess <path> [--no-timeline]
 voicequal listen [--calibrate] [--reset-calibration]
                  [--sensitive] [--stability-frames N]
                  [--heartbeat SECONDS]
@@ -11,11 +11,26 @@ voicequal listen [--calibrate] [--reset-calibration]
 ## `voicequal assess <path>`
 
 One-shot report for a WAV, FLAC, or OGG file. Prints the tier, the
-reason, and every metric on the `FileAssessment`.
+reason, every metric on the `FileAssessment`, then a per-second timeline
+of the SNR estimate and the weakest segments, so you can see *which
+seconds* dragged the score down.
 
 ```bash
 voicequal assess my_recording.wav
 ```
+
+```text
+Timeline (1 s segments, SNR estimate):
+     0-1s  ████░░   19.8 dB  excellent
+     1-2s  ████░░   18.9 dB  excellent
+     2-3s  ██░░░░    9.6 dB  poor
+     3-4s  ██░░░░    8.1 dB  poor
+Weakest: 3-4s (8.1 dB, poor), 2-3s (9.6 dB, poor)
+```
+
+The bar is the SNR estimate on a 0 to 30 dB scale. Segments in a quiet
+room are never listed as weakest. `--no-timeline` prints only the
+metrics panel.
 
 ## `voicequal listen`
 

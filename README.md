@@ -11,10 +11,12 @@ Real-time audio quality assessment for voice apps.
 Answers the question every voice app eventually has to answer:
 **"is this recording clean enough to process?"**
 
-voicequal analyzes audio with a handful of cheap acoustic metrics, led
-by the harmonic-to-noise ratio, and returns a tier — `excellent`,
-`good`, `fair`, or `poor` — plus the numbers behind the decision. Pure
-numpy/scipy, CPU-only, no models to download.
+voicequal analyzes audio with a handful of cheap acoustic metrics and
+returns a tier — `excellent`, `good`, `fair`, or `poor` — plus the
+numbers behind the decision, a per-second breakdown of where it went
+wrong, one line of advice, and DNSMOS-style P.835 scores from a
+distilled model that ships in the wheel. Pure numpy/scipy, CPU-only,
+nothing to download.
 
 ```text
 $ voicequal listen
@@ -80,6 +82,32 @@ voicequal listen --sensitive           # stricter thresholds
 
 First `listen` run auto-calibrates the mic (10 seconds — sit quiet
 then make noise). Calibration is saved to `~/.voicequal/`.
+
+### P.835 scores, advice, and per-second breakdown
+
+```python
+from voicequal import assess, advise
+from voicequal.models import predict_mos
+from voicequal.pipeline import worst_segments
+
+r = assess("recording.wav")
+print(advise(r).headline)  # "Loud room is drowning the voice"
+print(advise(r).actions)  # ("Move away from the noise source", ...)
+for seg in worst_segments(r, n=2):  # which seconds hurt most
+    print(f"{seg.start_s:.0f}-{seg.end_s:.0f}s  {seg.snr_estimate:.1f} dB  {seg.quality}")
+
+mos = predict_mos(samples, 16000)  # DNSMOS-style SIG/BAK/OVRL, pure numpy
+```
+
+### As an MCP tool
+
+```bash
+pip install 'voicequal[mcp]'
+voicequal-mcp        # stdio server exposing assess_file / assess_base64_wav
+```
+
+See the [docs](https://jiya-singhal.github.io/voicequal/) for the Claude
+Desktop and Claude Code config snippet.
 
 ## How it works
 
@@ -180,6 +208,21 @@ is not a defect. voicequal's estimate agrees with DNSMOS OVRL at +0.60.
 |---|---|---|
 | voicequal DSP | 15 ms | numpy + scipy |
 | DNSMOS | 880 ms | onnxruntime, 1.1 MB model |
+
+### Distilled P.835 model vs DNSMOS
+
+A 13k-parameter MLP on voicequal's features, trained to reproduce
+DNSMOS on VoiceBank-DEMAND train speakers and tested on the two unseen
+test speakers (1,648 clips). Ships in the wheel as 51 KB of numpy
+weights. Details and caveats in the docs.
+
+| Target | Pearson vs DNSMOS | MAE (MOS) | Linear-from-SNR baseline |
+|---|---|---|---|
+| BAK | **0.93** | 0.19 | 0.76 |
+| OVRL | **0.87** | 0.18 | 0.68 |
+| SIG | 0.65 | 0.19 | 0.36 |
+
+Inference after feature extraction: ~70 µs, versus ~180 ms for DNSMOS.
 
 ### Singing: VocalSet + MUSAN, 200 clips
 
@@ -292,7 +335,7 @@ Contributions welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first,
 especially the rule about benchmark numbers for any change to the tier
 logic.
 
-140 tests, all under `tests/`. CI runs them on Python 3.10, 3.11, and 3.12. The library has no runtime dependencies
+190+ tests, all under `tests/`. CI runs them on Python 3.10, 3.11, and 3.12. The library has no runtime dependencies
 beyond numpy, scipy, soundfile, and rich (CLI). `sounddevice` is
 optional (for live-mic support).
 

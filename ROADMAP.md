@@ -1,6 +1,6 @@
 # voicequal roadmap
 
-_Last updated: 2026-09-30. Current: v0.3.0 on main (v0.1.1 is the last PyPI release)._
+_Last updated: 2026-09-30. Current: v0.4.0 on main (v0.1.1 is the last PyPI release)._
 
 voicequal answers one question: **is this recording clean enough to
 process?** Today it does that with a rule-based, dependency-free DSP
@@ -119,14 +119,18 @@ wired in as a reference and is itself blind to singing.
 Goal: the parts that make the project interesting, built on a fixed
 feature pipeline.
 
-- [ ] **Distilled quality model.** Label DNS Challenge clips with DNSMOS, train a small model (GRU or gradient boosting) on DSP features plus log-mel, export to ONNX at ~1 MB. Target: 0.9 correlation with DNSMOS at 50x lower latency.
-- [ ] **Noise-type classification.** Hum, hiss, wind, crowd, broadband. Train on MUSAN and ESC-50. Restores a feature the original TypeScript service had.
-- [ ] **Per-segment explainability.** Which seconds dragged the score down, with a spectrogram overlay in the CLI and web demo.
-- [ ] **LLM advice layer.** Turn metrics into one sentence of actionable advice ("move away from the fan", "lower the mic gain, it is clipping").
-- [ ] **MCP server.** Expose `assess` as a tool so any agent can call voicequal.
+- [x] **Distilled quality model.** Labelled VoiceBank-DEMAND (not DNS Challenge) with DNSMOS, trained a ~13k-param MLP on DSP features plus log-mel stats, ships as numpy weights (~60 KB) with an ONNX export. BAK Pearson 0.93 / OVRL 0.87 / SIG 0.65 against DNSMOS on unseen speakers, MAE ~0.19 MOS, 51 KB, ~70 us per clip after features.
+- [ ] **Noise-type classification.** Hum, hiss, wind, crowd, broadband. Deferred: needs a labelled noise set on disk (ESC-50 or DEMAND per-environment); not started in v0.4.0.
+- [x] **Per-segment explainability.** 1 s segments on `FileAssessment`, `worst_segments()`, CLI timeline. Spectrogram overlay deferred to the web demo.
+- [x] **LLM advice layer.** Deterministic rules first (`advise()`), optional Claude rephrasing behind `voicequal[llm]`.
+- [x] **MCP server.** `voicequal-mcp` (stdio) with `assess_file` and `assess_base64_wav`, behind `voicequal[mcp]`.
 
 **Done when:** the ONNX model ships in the wheel, the correlation
 number is in the README, and the MCP server is documented.
+
+**Outcome (2026-09-30):** shipped as numpy weights inside the wheel
+(the ONNX file is an export alongside, not a runtime dependency).
+BAK Pearson 0.93 / OVRL 0.87 / SIG 0.65 against DNSMOS on unseen speakers, MAE ~0.19 MOS, 51 KB, ~70 us per clip after features. Noise-type classification is the one item left.
 
 ---
 

@@ -29,6 +29,8 @@ pip install 'voicequal[mic]'       # + live-mic support
 
 - [Quick start](quickstart.md): file analysis, streaming, and the CLI in
   five minutes.
+- [Distilled quality model](model.md): DNSMOS-style P.835 scores, pure numpy.
+- [Advice](advice.md) and [MCP server](mcp.md): actionable output for people and agents.
 - [How it works](how-it-works.md): the HNR-gated tier logic and the
   metrics behind it.
 - [Benchmark](benchmark.md): the honest numbers, including the weak

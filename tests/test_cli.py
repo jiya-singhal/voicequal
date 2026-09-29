@@ -47,3 +47,34 @@ def test_assess_command_missing_file(capsys):
     captured = capsys.readouterr()
     assert code == 1
     assert "not found" in captured.out.lower()
+
+
+def test_assess_prints_timeline_and_weakest(capsys):
+    sr = 16000
+    rng = np.random.default_rng(1)
+    t = np.arange(3 * sr) / sr
+    tone = 0.3 * np.sin(2 * np.pi * 220 * t)
+    noise = rng.standard_normal(t.size)
+    noise *= (np.sqrt(np.mean(tone**2)) / 10 ** (10 / 20)) / np.sqrt(np.mean(noise**2))
+    path = _write_wav((tone + noise).astype(np.float32), sr)
+    try:
+        assert main(["assess", path]) == 0
+        out = capsys.readouterr().out
+        assert "Timeline" in out
+        assert "Weakest" in out
+        assert "0-1s" in out
+    finally:
+        os.unlink(path)
+
+
+def test_assess_no_timeline_flag_suppresses_it(capsys):
+    sr = 16000
+    t = np.linspace(0, 2, 2 * sr, endpoint=False)
+    path = _write_wav((0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32), sr)
+    try:
+        assert main(["assess", path, "--no-timeline"]) == 0
+        out = capsys.readouterr().out
+        assert "Weakest" not in out
+        assert "Timeline" not in out
+    finally:
+        os.unlink(path)

@@ -35,6 +35,9 @@ nav:
   - API reference: api.md
   - CLI: cli.md
   - Neural backends: neural.md
+  - Quality model: model.md
+  - Advice: advice.md
+  - MCP server: mcp.md
   - Roadmap: roadmap.md
   - Contributing: contributing.md
   - Changelog: changelog.md
