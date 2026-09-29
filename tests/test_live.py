@@ -140,3 +140,42 @@ class TestHNRInLive:
         det.reset()
         assert det._hnr_history == []
         assert det._rms_history == []
+
+
+class TestSNREstimateInLive:
+    def test_snapshot_carries_energy_snr_and_estimate(self):
+        det = LiveDetector()
+        det.push(_sine(440.0, duration_s=3.0))
+        snap = det.get_current()
+        assert snap is not None
+        assert snap.snr_estimate == max(snap.hnr, snap.energy_snr)
+
+    def test_block_levels_are_windowed_and_reset(self):
+        from voicequal.live import BLOCK_WINDOW
+
+        det = LiveDetector()
+        det.push(_sine(440.0, duration_s=10.0))
+        assert 0 < len(det._block_levels) <= BLOCK_WINDOW
+        det.reset()
+        assert det._block_levels == []
+
+    def test_streaming_matches_file_pipeline_on_estimate(self):
+        from voicequal.pipeline import assess_samples
+
+        rng = np.random.default_rng(3)
+        t = np.arange(3 * 16000) / 16000
+        gate = ((t % 0.5) < 0.25).astype(np.float64)
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t) * gate
+        noise = rng.standard_normal(t.size)
+        noise *= np.sqrt(np.mean(tone[gate > 0] ** 2) / 100) / np.sqrt(np.mean(noise**2))
+        samples = (tone + noise).astype(np.float32)
+        det = LiveDetector()
+        for start in range(0, samples.size, 1000):
+            det.push(samples[start : start + 1000])
+        live = det.get_current()
+        file = assess_samples(samples, 16000)
+        assert live is not None
+        # Live uses a ~3 s window, the file uses everything; on a 3 s clip
+        # they should land within a few dB and the same tier.
+        assert live.energy_snr == pytest.approx(file.energy_snr, abs=4.0)
+        assert live.quality == file.quality

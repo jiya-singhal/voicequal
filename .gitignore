@@ -55,3 +55,7 @@ handoff.md
 
 # MkDocs build output
 site/
+
+# speech benchmark data + results (downloaded / regenerated)
+benchmarks/speech/data/
+benchmarks/speech/results/*.json

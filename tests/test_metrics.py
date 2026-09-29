@@ -4,8 +4,12 @@ import numpy as np
 import pytest
 
 from voicequal.metrics import (
+    ENERGY_SNR_CEIL_DB,
+    ENERGY_SNR_FLOOR_DB,
     HNR_FLOOR_DB,
+    block_rms,
     clipping_ratio,
+    energy_snr,
     harmonic_ratio,
     hnr,
     noise_floor,
@@ -230,3 +234,61 @@ class TestClippingRatio:
         frame = np.clip(_sine(440.0, amp=2.0), -1.0, 1.0)
         ratio = clipping_ratio(frame)
         assert 0.3 < ratio < 0.8
+
+
+class TestBlockRMS:
+    def test_empty_and_short_inputs_give_no_blocks(self):
+        assert block_rms(np.array([], dtype=np.float32)).size == 0
+        assert block_rms(np.zeros(399, dtype=np.float32)).size == 0
+
+    def test_block_count_and_values(self):
+        frame = np.concatenate([np.full(400, 0.5), np.zeros(400), np.full(400, -0.25)]).astype(
+            np.float32
+        )
+        levels = block_rms(frame)
+        assert levels.shape == (3,)
+        assert levels == pytest.approx([0.5, 0.0, 0.25])
+
+    def test_trailing_partial_block_is_dropped(self):
+        assert block_rms(np.ones(1000, dtype=np.float32)).shape == (2,)
+
+
+class TestEnergySNR:
+    def _speech_like(self, snr_db: float, seed: int = 0) -> np.ndarray:
+        # 3 s: 200 ms bursts of a tone separated by 200 ms pauses, plus white
+        # noise scaled so that the *burst* power vs noise power is snr_db.
+        rng = np.random.default_rng(seed)
+        sr = 16000
+        t = np.arange(3 * sr) / sr
+        gate = ((t % 0.4) < 0.2).astype(np.float64)
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t) * gate
+        burst_power = np.mean(tone[gate > 0] ** 2)
+        noise = rng.standard_normal(t.size)
+        noise *= np.sqrt(burst_power / 10 ** (snr_db / 10)) / np.sqrt(np.mean(noise**2))
+        return (tone + noise).astype(np.float32)
+
+    def test_too_few_blocks_returns_floor(self):
+        assert energy_snr(np.array([0.1, 0.2])) == ENERGY_SNR_FLOOR_DB
+
+    def test_silence_returns_floor(self):
+        assert energy_snr(np.zeros(100)) == ENERGY_SNR_FLOOR_DB
+
+    def test_signal_with_no_noise_floor_returns_ceiling(self):
+        levels = np.concatenate([np.zeros(50), np.full(50, 0.3)])
+        assert energy_snr(levels) == ENERGY_SNR_CEIL_DB
+
+    @pytest.mark.parametrize("target", [20.0, 10.0, 5.0])
+    def test_tracks_mixing_snr_when_pauses_exist(self, target):
+        est = energy_snr(block_rms(self._speech_like(target)))
+        assert est == pytest.approx(target, abs=3.0)
+
+    def test_sustained_tone_in_noise_reads_low(self):
+        # No pauses: quiet blocks still contain the tone, so the estimate
+        # collapses. This is the failure mode that HNR covers.
+        rng = np.random.default_rng(1)
+        t = np.arange(3 * 16000) / 16000
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t)
+        noise = rng.standard_normal(t.size)
+        noise *= (np.sqrt(np.mean(tone**2)) / 10 ** (20 / 20)) / np.sqrt(np.mean(noise**2))
+        est = energy_snr(block_rms((tone + noise).astype(np.float32)))
+        assert est < 8.0

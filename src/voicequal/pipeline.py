@@ -16,7 +16,9 @@ from voicequal.assessment import (
 )
 from voicequal.io import load_audio
 from voicequal.metrics import (
+    block_rms,
     clipping_ratio,
+    energy_snr,
     hnr,
     noise_floor,
     rms,
@@ -45,7 +47,10 @@ class FileAssessment:
         spectral_flatness: Aggregated 0..1 flatness.
         spectral_concentration: Aggregated 0..1 top-N energy concentration.
         hnr: Harmonic-to-noise ratio in dB, median over the louder half of
-            frames (tracks voice-vs-noise mixing SNR).
+            frames. Tracks mixing SNR for sustained voicing.
+        energy_snr: Loud-blocks vs quiet-blocks SNR in dB from 25 ms block
+            levels. Tracks mixing SNR when the audio has pauses.
+        snr_estimate: max(hnr, energy_snr). The value the tier is read from.
         clipping_ratio: Fraction of samples at or above the clipping
             threshold, averaged over frames.
         temporal_variance: The final temporal-variance reading.
@@ -64,6 +69,8 @@ class FileAssessment:
     spectral_flatness: float
     spectral_concentration: float
     hnr: float
+    energy_snr: float
+    snr_estimate: float
     clipping_ratio: float
     temporal_variance: float
     primary_score: float
@@ -101,6 +108,16 @@ def aggregate_hnr(hnr_values: list[float], rms_values: list[float]) -> float:
     return float(np.median(hnr_arr[loud]))
 
 
+def combine_snr_estimates(hnr_db: float, energy_snr_db: float) -> float:
+    """The pipeline's mixing-SNR estimate: the larger of the two lower bounds.
+
+    HNR under-reads when frames are unvoiced (consonants, breaths); the
+    energy SNR under-reads when there are no pauses (sustained singing).
+    Each fails low, so the max picks the estimator whose assumption held.
+    """
+    return float(max(hnr_db, energy_snr_db))
+
+
 def assess(
     path: str | Path,
     target_sample_rate: int = 16000,
@@ -126,6 +143,27 @@ def assess(
         ValueError: If the audio is too short to produce a single frame.
     """
     samples, sample_rate = load_audio(str(path), target_sample_rate=target_sample_rate)
+    return assess_samples(samples, sample_rate, threshold_offset_db=threshold_offset_db)
+
+
+def assess_samples(
+    samples: np.ndarray,
+    sample_rate: int,
+    threshold_offset_db: float = 0.0,
+) -> FileAssessment:
+    """Assess an in-memory mono clip. Same pipeline as :func:`assess`.
+
+    Args:
+        samples: 1D float array in [-1, 1].
+        sample_rate: Sample rate of ``samples``. No resampling is done here;
+            use :func:`voicequal.io.load_audio` or resample first if the
+            frame constants assume 16 kHz matters to you.
+        threshold_offset_db: See :func:`assess`.
+
+    Raises:
+        ValueError: If the clip is too short to produce a single frame.
+    """
+    samples = np.asarray(samples, dtype=np.float32).reshape(-1)
     duration_seconds = float(samples.size / sample_rate)
 
     stats = RollingStats()
@@ -169,7 +207,7 @@ def assess(
     if num_frames == 0:
         raise ValueError(
             f"Audio too short: need at least {FRAME_SIZE} samples "
-            f"({FRAME_SIZE / target_sample_rate:.2f}s), got {samples.size}."
+            f"({FRAME_SIZE / sample_rate:.2f}s), got {samples.size}."
         )
 
     # Aggregate steady-state (last N frames).
@@ -180,6 +218,8 @@ def assess(
     agg_concentration = float(np.mean(concentration_values[-tail:]))
     # HNR uses the whole file: voice may not sit in the last N frames.
     agg_hnr = aggregate_hnr(hnr_values, rms_values)
+    agg_energy_snr = energy_snr(block_rms(samples))
+    agg_snr_estimate = combine_snr_estimates(agg_hnr, agg_energy_snr)
     agg_clipping = float(np.mean(clipping_values))
     # Temporal variance is already a rolling statistic; use its last reading.
     agg_temporal_variance = float(temporal_variance_values[-1])
@@ -192,6 +232,7 @@ def assess(
         spectral_concentration=agg_concentration,
         threshold_offset_db=threshold_offset_db,
         hnr=agg_hnr,
+        snr_estimate=agg_snr_estimate,
     )
 
     return FileAssessment(
@@ -202,6 +243,8 @@ def assess(
         spectral_flatness=agg_flatness,
         spectral_concentration=agg_concentration,
         hnr=agg_hnr,
+        energy_snr=agg_energy_snr,
+        snr_estimate=agg_snr_estimate,
         clipping_ratio=agg_clipping,
         temporal_variance=agg_temporal_variance,
         primary_score=quality.primary_score,

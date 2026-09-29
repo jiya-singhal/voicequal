@@ -25,7 +25,9 @@ Frozen dataclass returned by `assess`.
 | `quality` | `str` | `excellent`, `good`, `fair`, or `poor`. |
 | `reason` | `str` | Which branch of the tier logic fired, in words. |
 | `background_db` | `float` | Aggregated dBA-like room loudness. |
-| `hnr` | `float` | Harmonic-to-noise ratio in dB, median over the louder half of frames. Drives the tier. |
+| `snr_estimate` | `float` | max(`hnr`, `energy_snr`), the mixing-SNR estimate the tier is read from. |
+| `hnr` | `float` | Harmonic-to-noise ratio in dB, median over the louder half of frames. |
+| `energy_snr` | `float` | Loud-blocks vs quiet-blocks SNR in dB from 25 ms block levels. |
 | `snr` | `float` | Aggregated spectral SNR in dB (informational since v0.2.0). |
 | `spectral_flatness` | `float` | 0..1, higher is more noise-like. |
 | `spectral_concentration` | `float` | 0..1, share of energy in the top-3 FFT bins. |
@@ -63,8 +65,9 @@ Methods:
 Frozen dataclass describing the current rolling window. Fields mirror
 `FileAssessment` minus the file-level ones:
 
-`quality`, `reason`, `hnr`, `background_db`, `snr`, `spectral_flatness`,
-`spectral_concentration`, `clipping_ratio`, `temporal_variance`, `frames_analyzed`.
+`quality`, `reason`, `snr_estimate`, `hnr`, `energy_snr`, `background_db`,
+`snr`, `spectral_flatness`, `spectral_concentration`, `clipping_ratio`,
+`temporal_variance`, `frames_analyzed`.
 
 ## Calibration
 
@@ -86,9 +89,13 @@ these functions exist for apps that run their own calibration flow.
 
 Also exported, for people who want the pieces:
 
-- `voicequal.metrics`: `rms`, `hnr`, `harmonic_ratio`, `clipping_ratio`,
-  `snr`, `noise_floor`, `spectral_flatness`, `spectral_concentration`.
-  Pure per-frame functions.
+- `voicequal.metrics`: `rms`, `hnr`, `harmonic_ratio`, `block_rms`,
+  `energy_snr`, `clipping_ratio`, `snr`, `noise_floor`,
+  `spectral_flatness`, `spectral_concentration`. Pure functions.
+- `voicequal.pipeline.assess_samples(samples, sample_rate)`: the same
+  pipeline as `assess()` for an in-memory mono array.
+- `voicequal.neural`: optional `DNSMOS` backend, see
+  [Neural backends](neural.md).
 - `voicequal.state.RollingStats`: rolling noise-floor and RMS history.
 - `voicequal.assessment.assess_quality`: the tier decision, returning a
   `QualityAssessment`.

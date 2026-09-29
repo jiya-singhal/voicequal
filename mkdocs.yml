@@ -34,6 +34,7 @@ nav:
   - Benchmark: benchmark.md
   - API reference: api.md
   - CLI: cli.md
+  - Neural backends: neural.md
   - Roadmap: roadmap.md
   - Contributing: contributing.md
   - Changelog: changelog.md

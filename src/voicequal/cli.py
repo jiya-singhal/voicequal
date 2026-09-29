@@ -63,7 +63,9 @@ def _cmd_assess(path: str) -> int:
     table.add_row("Reason", result.reason)
     table.add_row("", "")
     table.add_row("Background", f"{result.background_db:.1f} dBA")
-    table.add_row("HNR", f"{result.hnr:.1f} dB")
+    table.add_row("SNR estimate", f"{result.snr_estimate:.1f} dB")
+    table.add_row("  HNR", f"{result.hnr:.1f} dB")
+    table.add_row("  Energy SNR", f"{result.energy_snr:.1f} dB")
     table.add_row("SNR (spectral)", f"{result.snr:.1f} dB")
     table.add_row("Clipping", f"{result.clipping_ratio:.1%}")
     table.add_row("Flatness", f"{result.spectral_flatness:.2f}")
@@ -179,7 +181,7 @@ def _cmd_listen(
         console.print(
             f"[dim]{ts}[/]  [bold cyan]CHANGE[/]  ",
             qual,
-            f"  HNR=[bold]{a.hnr:5.1f}[/]dB  "
+            f"  SNR=[bold]{a.snr_estimate:5.1f}[/]dB  "
             f"bgDB=[bold]{a.background_db:5.1f}[/]  "
             f"flat=[bold]{a.spectral_flatness:.2f}[/]  "
             f"var=[bold]{a.temporal_variance:.1f}[/]",
@@ -256,7 +258,7 @@ def _cmd_listen(
                             f"[dim]{ts}[/]  ",
                             qual,
                             f"  room=[bold {bg_color}]{bg:5.1f} dBA[/]  ",
-                            f"HNR={current.hnr:5.1f}dB  SNR={current.snr:5.1f}dB",
+                            f"SNR={current.snr_estimate:5.1f}dB  hnr={current.hnr:4.1f}  e={current.energy_snr:4.1f}",
                             sep="",
                         )
                     last_hb = now

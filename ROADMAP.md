@@ -1,10 +1,10 @@
 # voicequal roadmap
 
-_Last updated: 2026-09-25. Current release: v0.2.0 (unreleased on PyPI)._
+_Last updated: 2026-09-30. Current: v0.3.0 on main (v0.1.1 is the last PyPI release)._
 
 voicequal answers one question: **is this recording clean enough to
 process?** Today it does that with a rule-based, dependency-free DSP
-pipeline that reaches 46% exact tier accuracy on a 200-clip benchmark.
+pipeline benchmarked on public speech and singing sets.
 This roadmap turns it into the lightweight, honest, well-benchmarked
 member of the non-intrusive speech-quality field.
 
@@ -95,14 +95,22 @@ further.
 Goal: make voicequal a drop-in first check in a standard speech-quality
 pipeline.
 
-- [ ] Emit **P.835-style SIG / BAK / OVRL** scores alongside the tier.
-- [ ] `voicequal[neural]` extra with **DNSMOS** and **NISQA** as pluggable backends behind one interface.
-- [ ] Benchmark on **DNS Challenge** and **VoiceBank-DEMAND** with published ground truth.
-- [ ] Publish one comparison table: DSP path vs DNSMOS on latency, model size, and correlation with human MOS.
-- [ ] Position in README: fast CPU-only pre-check, escalate to neural when needed.
+- [ ] Emit **P.835-style SIG / BAK / OVRL** scores alongside the tier. Deferred: without human MOS labels any DSP-side mapping would just be a re-labelling of `snr_estimate`. Revisit once a MOS-labelled set is in the benchmark.
+- [x] `voicequal[neural]` extra with **DNSMOS** (ONNX, pinned hash, cached). NISQA deferred.
+- [x] Benchmark on **VoiceBank-DEMAND** (824 test clips, true SNR from clean/noisy pairs). DNS Challenge deferred.
+- [x] Publish one comparison table: DSP path vs DNSMOS on latency and correlation with true SNR (no human MOS in this set yet).
+- [x] Position in README: fast CPU-only pre-check, escalate to neural when needed.
 
 **Done when:** the comparison table is in the README and the numbers
 are reproducible from a single script.
+
+**Outcome (2026-09-30):** the speech benchmark exposed that HNR alone
+does not transfer to read speech (Spearman 0.19 vs true SNR). An
+energy-domain SNR from 25 ms block levels does (+0.91), and
+fails safely on singing, so v0.3.0 reads the tier from
+`max(hnr, energy_snr)` with one ladder fitted on both sets. Speech: exact
+80.0% / off-by-one 99.2%. Singing: 58.0% / 86.0%. DNSMOS is
+wired in as a reference and is itself blind to singing.
 
 ---
 

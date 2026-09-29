@@ -306,3 +306,44 @@ class TestHNRGatedPath:
             spectral_concentration=0.5,
         )
         assert legacy.reason.startswith("35<snr<=50")
+
+
+class TestSNREstimateLadder:
+    """v0.3.0 decision path, selected whenever snr_estimate is provided."""
+
+    def _run(self, background_db: float, snr_estimate: float, **kw):
+        return assess_quality(
+            background_db=background_db,
+            spectral_flatness=0.3,
+            snr=40.0,
+            temporal_variance=5.0,
+            spectral_concentration=0.5,
+            hnr=0.0,  # must be ignored when snr_estimate is present
+            snr_estimate=snr_estimate,
+            **kw,
+        )
+
+    def test_quiet_room_is_excellent(self):
+        assert self._run(45.0, -20.0).quality == "excellent"
+
+    def test_ladder_thresholds(self):
+        from voicequal.assessment import SNR_EXCELLENT_DB, SNR_FAIR_DB, SNR_GOOD_DB
+
+        assert self._run(73.0, SNR_EXCELLENT_DB).quality == "excellent"
+        assert self._run(73.0, SNR_EXCELLENT_DB - 0.1).quality == "good"
+        assert self._run(73.0, SNR_GOOD_DB).quality == "good"
+        assert self._run(73.0, SNR_GOOD_DB - 0.1).quality == "fair"
+        assert self._run(73.0, SNR_FAIR_DB).quality == "fair"
+        assert self._run(73.0, SNR_FAIR_DB - 0.1).quality == "poor"
+
+    def test_snr_estimate_takes_precedence_over_hnr(self):
+        # hnr=0 alone would be poor; snr_estimate=25 wins.
+        assert self._run(73.0, 25.0).quality == "excellent"
+        assert "snr>=" in self._run(73.0, 25.0).reason
+
+    def test_hnr_only_still_uses_v020_ladder(self):
+        result = assess_quality(
+            background_db=73.0, spectral_flatness=0.3, snr=40.0, temporal_variance=5.0, hnr=12.0
+        )
+        assert result.quality == "good"
+        assert "hnr" in result.reason

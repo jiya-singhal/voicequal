@@ -277,3 +277,72 @@ def clipping_ratio(frame: np.ndarray, threshold: float = 0.99) -> float:
     if frame.size == 0:
         return 0.0
     return float(np.mean(np.abs(frame) >= threshold))
+
+
+# ---------------------------------------------------------------------------
+# Energy-domain SNR from short-block levels
+#
+# Speech has pauses. If the quietest blocks are noise-only and the loudest
+# blocks are speech-plus-noise, then (P_loud - P_quiet) / P_quiet is the
+# mixing SNR. Sustained singing has no pauses, so the "quiet" blocks still
+# contain voice and this estimate collapses toward 0 dB: it is a lower bound
+# that fails safe. HNR fails the opposite way (unvoiced speech lowers it),
+# which is why the pipeline takes max(hnr, energy_snr) as its SNR estimate.
+
+BLOCK_SIZE: int = 400  # 25 ms at 16 kHz
+ENERGY_SNR_FLOOR_DB: float = -20.0
+ENERGY_SNR_CEIL_DB: float = 60.0
+
+
+def block_rms(samples: np.ndarray, block_size: int = BLOCK_SIZE) -> np.ndarray:
+    """RMS of consecutive non-overlapping blocks. Trailing partial block dropped.
+
+    Args:
+        samples: 1D numpy array of audio samples.
+        block_size: Samples per block (default 400 = 25 ms at 16 kHz).
+
+    Returns:
+        1D float64 array with one RMS value per block. Empty if the input is
+        shorter than one block.
+    """
+    n_blocks = samples.size // block_size
+    if n_blocks == 0:
+        return np.zeros(0, dtype=np.float64)
+    blocks = samples[: n_blocks * block_size].astype(np.float64).reshape(n_blocks, block_size)
+    return np.sqrt(np.mean(np.square(blocks), axis=1))
+
+
+def energy_snr(
+    block_levels: np.ndarray,
+    loud_percentile: float = 50.0,
+    quiet_percentile: float = 30.0,
+) -> float:
+    """SNR in dB from the loud and quiet tails of a block-RMS series.
+
+    Noise power is the mean power of blocks at or below ``quiet_percentile``;
+    signal-plus-noise power is the mean power of blocks at or above
+    ``loud_percentile``. Returns 10*log10((P_loud - P_quiet) / P_quiet).
+
+    Args:
+        block_levels: 1D array of block RMS values (see block_rms).
+        loud_percentile: Blocks at or above this percentile count as signal.
+        quiet_percentile: Blocks at or below this percentile count as noise.
+
+    Returns:
+        A float in dB clipped to [ENERGY_SNR_FLOOR_DB, ENERGY_SNR_CEIL_DB].
+        Returns ENERGY_SNR_FLOOR_DB when fewer than 4 blocks are given or
+        the series is silent.
+    """
+    levels = np.asarray(block_levels, dtype=np.float64)
+    if levels.size < 4 or not np.any(levels > 0):
+        return ENERGY_SNR_FLOOR_DB
+    quiet = levels[levels <= np.percentile(levels, quiet_percentile)]
+    loud = levels[levels >= np.percentile(levels, loud_percentile)]
+    p_noise = float(np.mean(np.square(quiet)))
+    p_loud = float(np.mean(np.square(loud)))
+    if p_noise <= 1e-20:
+        return ENERGY_SNR_CEIL_DB
+    ratio = (p_loud - p_noise) / p_noise
+    if ratio <= 1e-6:
+        return ENERGY_SNR_FLOOR_DB
+    return float(np.clip(10.0 * np.log10(ratio), ENERGY_SNR_FLOOR_DB, ENERGY_SNR_CEIL_DB))

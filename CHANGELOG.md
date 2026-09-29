@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-30
+
+Speech support and the first comparison against a neural reference.
+
+### Added
+- `energy_snr()` and `block_rms()` metrics: mixing SNR from the loudest
+  half of 25 ms blocks against the quietest 30%. Tracks true SNR on read
+  speech (VoiceBank-DEMAND: Spearman +0.91) where HNR does not,
+  and collapses safely on sustained singing where HNR takes over.
+- `snr_estimate` field on `FileAssessment` and `LiveAssessment`:
+  `max(hnr, energy_snr)`. This is now the value the tier is read from.
+- `assess_samples(samples, sample_rate)`: the file pipeline for an
+  in-memory array.
+- `voicequal[neural]` extra with `voicequal.neural.DNSMOS`: Microsoft's
+  P.835 predictor (SIG / BAK / OVRL) via ONNX Runtime. Model is
+  downloaded once, SHA-256 pinned, cached under `~/.voicequal/models/`.
+- Speech benchmark `benchmarks/speech/run_voicebank_demand.py`: 824
+  public VoiceBank-DEMAND test clips with the true mixing SNR computed
+  from each clean/noisy pair, scored by voicequal and DNSMOS, with
+  latency. Results in the README.
+
+### Changed
+- **Tier ladder now reads `snr_estimate` at 18.5 / 13.5 / 10 dB**, fitted
+  jointly on the speech and singing benchmarks. `assess_quality()` gains
+  a `snr_estimate` argument; `hnr`-only calls keep the v0.2.0 ladder and
+  calls with neither keep the v0.1.x logic.
+- VocalSet benchmark (200 clips): exact 55.5% -> 58.0%, off-by-one
+  89.5% -> 86.0%, Spearman +0.662 -> +0.645. `very_loud_snr` 32.5% -> 60.0%,
+  `loud_snr` 57.5% -> 55.0%, `moderate_snr` 32.5% -> 45.0%,
+  `clean_vocal` 55.0% -> 30.0% (breathy / lip-trill clips now read `good`).
+- VoiceBank-DEMAND speech (824 clips, nominal-SNR tiers): exact
+  80.0%, off-by-one 99.2%. The v0.2.0 HNR-only ladder scored
+  27.9% / 63.3% on the same set.
+- CLI shows `SNR estimate` with its two inputs.
+
+### Found
+- DNSMOS does not transfer to singing: clean VocalSet vowels score ~1.1
+  on every axis, the same as white noise. The DSP-vs-DNSMOS comparison
+  is therefore done on speech only.
+
 ## [0.2.0] - 2026-09-25
 
 The mixing-SNR fix. See the README benchmark section for the full numbers.
@@ -85,7 +125,8 @@ The mixing-SNR fix. See the README benchmark section for the full numbers.
 - Four metrics: SNR, spectral flatness, temporal variance, and
   background dBA.
 
-[Unreleased]: https://github.com/jiya-singhal/voicequal/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jiya-singhal/voicequal/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jiya-singhal/voicequal/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jiya-singhal/voicequal/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jiya-singhal/voicequal/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jiya-singhal/voicequal/releases/tag/v0.1.0

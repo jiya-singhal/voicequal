@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from voicequal.pipeline import FileAssessment, assess
+from voicequal.pipeline import FileAssessment, assess, assess_samples
 
 
 def _write_wav(samples: np.ndarray, sample_rate: int) -> str:
@@ -159,3 +159,65 @@ class TestHNRFields:
             assert assess(path).clipping_ratio > 0.3
         finally:
             os.unlink(path)
+
+
+class TestAssessSamples:
+    def test_matches_file_path_result(self):
+        sample_rate = 16000
+        rng = np.random.default_rng(5)
+        t = np.linspace(0, 2, 2 * sample_rate, endpoint=False)
+        samples = (0.4 * np.sin(2 * np.pi * 330 * t) + 0.02 * rng.standard_normal(t.size)).astype(
+            np.float32
+        )
+        path = _write_wav(samples, sample_rate)
+        try:
+            via_file = assess(path)
+        finally:
+            os.unlink(path)
+        via_array = assess_samples(samples, sample_rate)
+        assert via_array.quality == via_file.quality
+        assert via_array.hnr == pytest.approx(via_file.hnr, abs=1e-3)
+        assert via_array.background_db == pytest.approx(via_file.background_db, abs=1e-3)
+
+    def test_too_short_raises(self):
+        with pytest.raises(ValueError):
+            assess_samples(np.zeros(100, dtype=np.float32), 16000)
+
+
+class TestSNREstimate:
+    def _write(self, samples):
+        return _write_wav(samples.astype(np.float32), 16000)
+
+    def test_speech_like_bursts_in_noise_use_energy_snr(self):
+        # Gated tone (pauses) at 20 dB burst SNR: HNR under-reads because
+        # half the frames are noise-only, energy SNR reads the mix correctly,
+        # and the estimate takes the larger.
+        rng = np.random.default_rng(0)
+        t = np.arange(3 * 16000) / 16000
+        gate = ((t % 0.5) < 0.25).astype(np.float64)
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t) * gate
+        noise = rng.standard_normal(t.size)
+        noise *= np.sqrt(np.mean(tone[gate > 0] ** 2) / 100) / np.sqrt(np.mean(noise**2))
+        path = self._write(tone + noise)
+        try:
+            r = assess(path)
+        finally:
+            os.unlink(path)
+        assert r.energy_snr == pytest.approx(20.0, abs=3.0)
+        assert r.snr_estimate == max(r.hnr, r.energy_snr)
+        assert r.quality == "excellent"
+
+    def test_sustained_tone_in_noise_uses_hnr(self):
+        rng = np.random.default_rng(1)
+        t = np.arange(3 * 16000) / 16000
+        tone = 0.3 * np.sin(2 * np.pi * 220 * t)
+        noise = rng.standard_normal(t.size)
+        noise *= (np.sqrt(np.mean(tone**2)) / 10 ** (25 / 20)) / np.sqrt(np.mean(noise**2))
+        path = self._write(tone + noise)
+        try:
+            r = assess(path)
+        finally:
+            os.unlink(path)
+        assert r.hnr > r.energy_snr  # no pauses: energy SNR collapses
+        assert r.snr_estimate == r.hnr
+        assert r.quality == "excellent"

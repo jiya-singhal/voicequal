@@ -3,7 +3,9 @@ from voicequal.assessment import QualityAssessment, assess_quality
 from voicequal.io import load_audio
 from voicequal.live import LiveAssessment, LiveDetector
 from voicequal.metrics import (
+    block_rms,
     clipping_ratio,
+    energy_snr,
     harmonic_ratio,
     hnr,
     noise_floor,
@@ -12,7 +14,7 @@ from voicequal.metrics import (
     spectral_concentration,
     spectral_flatness,
 )
-from voicequal.pipeline import FileAssessment, assess
+from voicequal.pipeline import FileAssessment, assess, assess_samples
 from voicequal.state import RollingStats
 
 
@@ -41,8 +43,11 @@ __all__ = [
     "__version__",
     "assess",
     "assess_quality",
+    "assess_samples",
+    "block_rms",
     "calibration",
     "clipping_ratio",
+    "energy_snr",
     "harmonic_ratio",
     "hnr",
     "load_audio",

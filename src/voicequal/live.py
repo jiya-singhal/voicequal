@@ -16,7 +16,10 @@ import numpy as np
 
 from voicequal.assessment import assess_quality
 from voicequal.metrics import (
+    BLOCK_SIZE,
+    block_rms,
     clipping_ratio,
+    energy_snr,
     hnr,
     noise_floor,
     rms,
@@ -24,7 +27,13 @@ from voicequal.metrics import (
     spectral_concentration,
     spectral_flatness,
 )
-from voicequal.pipeline import FRAME_SIZE, HOP_SIZE, STEADY_STATE_TAIL, aggregate_hnr
+from voicequal.pipeline import (
+    FRAME_SIZE,
+    HOP_SIZE,
+    STEADY_STATE_TAIL,
+    aggregate_hnr,
+    combine_snr_estimates,
+)
 from voicequal.state import RollingStats
 
 # Number of consecutive frames a new tier must appear in before it
@@ -35,6 +44,8 @@ DEFAULT_STABILITY_FRAMES: int = 3
 # 10Hz) because it is a median over the louder half of frames and needs
 # enough voiced frames to be stable.
 HNR_WINDOW_FRAMES: int = RollingStats.RMS_HISTORY_SIZE
+# 25 ms block levels kept for the energy SNR: same ~3 s window as HNR.
+BLOCK_WINDOW: int = HNR_WINDOW_FRAMES * (HOP_SIZE // BLOCK_SIZE)
 
 
 @dataclass(frozen=True)
@@ -52,6 +63,8 @@ class LiveAssessment:
     spectral_flatness: float
     spectral_concentration: float
     hnr: float
+    energy_snr: float
+    snr_estimate: float
     clipping_ratio: float
     temporal_variance: float
     frames_analyzed: int
@@ -100,6 +113,7 @@ class LiveDetector:
         self._hnr_history: list[float] = []
         self._rms_history: list[float] = []
         self._clipping_history: list[float] = []
+        self._block_levels: list[float] = []
         self._last_temporal_variance: float = 0.0
 
         # Hysteresis state.
@@ -134,6 +148,11 @@ class LiveDetector:
         # Extract as many complete frames as we can, hop by hop.
         while self._buffer.size >= FRAME_SIZE:
             frame = self._buffer[:FRAME_SIZE]
+            # Block levels come from the hop that is about to leave the
+            # buffer, so every sample is counted exactly once.
+            self._block_levels.extend(block_rms(self._buffer[:HOP_SIZE]).tolist())
+            if len(self._block_levels) > BLOCK_WINDOW:
+                self._block_levels = self._block_levels[-BLOCK_WINDOW:]
             self._process_frame(frame)
             # Advance the buffer by HOP_SIZE (not FRAME_SIZE — we overlap).
             self._buffer = self._buffer[HOP_SIZE:]
@@ -189,6 +208,8 @@ class LiveDetector:
         agg_concentration = float(np.mean(self._concentration_history))
         agg_background_db = float(np.mean(self._background_db_history))
         agg_hnr = aggregate_hnr(self._hnr_history, self._rms_history)
+        agg_energy_snr = energy_snr(np.asarray(self._block_levels))
+        agg_snr_estimate = combine_snr_estimates(agg_hnr, agg_energy_snr)
         agg_clipping = float(np.mean(self._clipping_history))
         agg_temporal_variance = self._last_temporal_variance
 
@@ -200,6 +221,7 @@ class LiveDetector:
             spectral_concentration=agg_concentration,
             threshold_offset_db=self.threshold_offset_db,
             hnr=agg_hnr,
+            snr_estimate=agg_snr_estimate,
         )
 
         self._latest_assessment = LiveAssessment(
@@ -210,6 +232,8 @@ class LiveDetector:
             spectral_flatness=agg_flatness,
             spectral_concentration=agg_concentration,
             hnr=agg_hnr,
+            energy_snr=agg_energy_snr,
+            snr_estimate=agg_snr_estimate,
             clipping_ratio=agg_clipping,
             temporal_variance=agg_temporal_variance,
             frames_analyzed=self._frames_analyzed,
@@ -260,6 +284,7 @@ class LiveDetector:
         self._hnr_history.clear()
         self._rms_history.clear()
         self._clipping_history.clear()
+        self._block_levels.clear()
         self._last_temporal_variance = 0.0
         self._current_tier = None
         self._candidate_tier = None

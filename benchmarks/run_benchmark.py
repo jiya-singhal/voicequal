@@ -43,6 +43,8 @@ class ClipResult:
     spectral_flatness: float
     spectral_concentration: float
     hnr: float
+    energy_snr: float
+    snr_estimate: float
     clipping_ratio: float
     temporal_variance: float
     reason: str
@@ -97,6 +99,8 @@ def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
                 spectral_flatness=r.spectral_flatness,
                 spectral_concentration=r.spectral_concentration,
                 hnr=r.hnr,
+                energy_snr=r.energy_snr,
+                snr_estimate=r.snr_estimate,
                 clipping_ratio=r.clipping_ratio,
                 temporal_variance=r.temporal_variance,
                 reason=r.reason,
@@ -135,7 +139,9 @@ def run(limit: int | None = None) -> tuple[BenchmarkReport, list[ClipResult]]:
     if len(mixed) >= 3:
         truth = [r.snr_db for r in mixed]
         for name, values in (
+            ("snr_estimate", [r.snr_estimate for r in mixed]),
             ("hnr", [r.hnr for r in mixed]),
+            ("energy_snr", [r.energy_snr for r in mixed]),
             ("spectral_snr", [r.snr_measured for r in mixed]),
         ):
             errors = [v - t for v, t in zip(values, truth, strict=True)]
