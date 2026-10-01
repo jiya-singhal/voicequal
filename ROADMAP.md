@@ -1,6 +1,6 @@
 # voicequal roadmap
 
-_Last updated: 2026-09-30. Current: v0.4.0 on main (v0.1.1 is the last PyPI release)._
+_Last updated: 2026-10-02. Current release: v0.4.0 on PyPI and GitHub._
 
 voicequal answers one question: **is this recording clean enough to
 process?** Today it does that with a rule-based, dependency-free DSP
